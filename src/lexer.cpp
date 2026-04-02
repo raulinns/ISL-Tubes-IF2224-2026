@@ -235,12 +235,15 @@ Token Lexer::readComment(char openChar) {
 
     if (openChar == '{') {
         // Tipe 1
-        // State: S_CMT1
+        // State: qCB
         char c = nextChar();
         while (c != '}' && c != '\0') {
             body += c;
             c = nextChar();
         }
+
+        // qCB + '}' -> accept, masuk COMMENT
+        // qCB + EOF -> TOKEN_ERROR
         if (c == '}') {
             return Token(COMMENT, "{" + body + "}", startLine);
         }
@@ -248,25 +251,33 @@ Token Lexer::readComment(char openChar) {
 
     } else {
         // Tipe 2. ( dan * udah tadi sama readOperatorOrPunct
-        // State awal: S_CMT2
+        // State awal: qCP1
         char c = nextChar();
         while (true) {
+
+            // qCP1 + EOF -> TOKEN_ERROR
+            // qCP1 + '*' -> pindah ke qCP2
+            // qCP1 + lainnya -> tetep qCP1 (loop)
             if (c == '\0') {
                 return Token(TOKEN_ERROR, "Komentar '(*' tidak ditutup", startLine);
             }
             if (c == '*') {
-                // State: S_CMT2_STAR
+                // State: qCP2
                 char next = nextChar();
+
+                // qCP2 + ')' -> accept masuk COMMENT
+                // qCP2 + '*' -> tetep qCP2
+                // qCP2 + lainnya -> balik qCP1
                 if (next == ')') {
                     return Token(COMMENT, "(*" + body + "*)", startLine);
                 }
                 if (next == '*') {
-                    // teteep di S_CMT2_STAR
+                    // teteep di qCP2
                     body += c;
                     c = next;
                     continue;
                 }
-                // Balik ke S_CMT2
+                // Balik ke qCP1
                 body += c;
                 c = next;
                 continue;

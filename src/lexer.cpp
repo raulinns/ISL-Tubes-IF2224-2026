@@ -78,6 +78,9 @@ TokenType Lexer::lookupKeyword(const std::string& lowerWord) {
     if (lowerWord == "begin") return BEGINSY;
     if (lowerWord == "end") return ENDSY;
     if (lowerWord == "else") return ELSESY;
+    if (lowerWord == "not") return NOTSY;
+    if (lowerWord == "and") return ANDSY;
+    if (lowerWord == "or") return ORSY;
     if (lowerWord == "mod") return IMOD;
     
 
@@ -194,6 +197,36 @@ Token Lexer::readOperatorOrPunct() {
         return Token(TIMES, "", startLine);
     case '/':
         return Token(RDIV, "", startLine);
+    case '(':
+        return Token(LPARENT, "", startLine);
+    case ')':
+        return Token(RPARENT, "", startLine);
+    case '[':
+        return Token(LBRACK, "", startLine);
+    case ']':
+        return Token(RBRACK, "", startLine);
+    case ',':
+        return Token(COMMA, "", startLine);
+    case ';':
+        return Token(SEMICOLON, "", startLine);
+    case '.':
+        return Token(PERIOD, "", startLine);
+    case ':': {
+        int first = src_.get();
+        int second = src_.get();
+
+        if (second != EOF) {
+            src_.putback(static_cast<char>(second));
+        }
+        if (first != EOF) {
+            src_.putback(static_cast<char>(first));
+        }
+
+        if (first == '=' || (first == ':' && second == '=')) {
+            return Token(BECOMES, "", startLine);
+        }
+        return Token(COLON, "", startLine);
+    }
     default:
         return Token(TOKEN_ERROR, std::string(1, c), startLine);
     }

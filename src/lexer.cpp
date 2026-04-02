@@ -232,22 +232,22 @@ Token Lexer::readOperatorOrPunct() {
         char lookahead = nextChar();
         if (lookahead == '=') {
             nextChar();
-            return Token(GEQ, "", line_);
+            return Token(GEQ, "", startLine);
         }
-        return Token(GTR, "", line_);
+        return Token(GTR, "", startLine);
     }
 
     case '<': {
         char lookahead = nextChar();
         if (lookahead == '=') {
             nextChar();
-            return Token(LEQ, "", line_);
+            return Token(LEQ, "", startLine);
         }
         if (lookahead == '>') {
             nextChar();
-            return Token(NEQ, "", line_);
+            return Token(NEQ, "", startLine);
         }
-        return Token(LSS, "", line_);
+        return Token(LSS, "", startLine);
     }
 
     case '=': {
@@ -256,7 +256,7 @@ Token Lexer::readOperatorOrPunct() {
             nextChar();
             return Token(EQL, "", line_);
         }
-        return Token(TOKEN_ERROR, std::string(1, startLine), line_);
+        return Token(TOKEN_ERROR, std::string(1, c), startLine);
     }
 
     default:

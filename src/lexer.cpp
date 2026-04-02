@@ -53,20 +53,22 @@ std::string Lexer::toLower(const std::string& s) {
 
 TokenType Lexer::lookupKeyword(const std::string& lowerWord) {
     // Menerima string lowercase, mengembalikan TokenType keyword kontrol yang sesuai. Jika tidak ada yang cocok, return IDENT.
-    if (lowerWord == "if")      return IFSY;
-    if (lowerWord == "case")    return CASESY;
-    if (lowerWord == "repeat")  return REPEATSY;
-    if (lowerWord == "while")   return WHILESY;
-    if (lowerWord == "for")     return FORSY;
-    if (lowerWord == "until")   return UNTILSY;
-    if (lowerWord == "of")      return OFSY;
-    if (lowerWord == "do")      return DOSY;
-    if (lowerWord == "to")      return TOSY;
-    if (lowerWord == "downto")  return DOWNTOSY;
-    if (lowerWord == "then")    return THENSY;
-    if (lowerWord == "begin")   return BEGINSY;
-    if (lowerWord == "end")     return ENDSY;
-    if (lowerWord == "else")    return ELSESY;
+    if (lowerWord == "if") return IFSY;
+    if (lowerWord == "case") return CASESY;
+    if (lowerWord == "repeat") return REPEATSY;
+    if (lowerWord == "while") return WHILESY;
+    if (lowerWord == "for") return FORSY;
+    if (lowerWord == "until") return UNTILSY;
+    if (lowerWord == "of") return OFSY;
+    if (lowerWord == "do") return DOSY;
+    if (lowerWord == "to") return TOSY;
+    if (lowerWord == "downto") return DOWNTOSY;
+    if (lowerWord == "then") return THENSY;
+    if (lowerWord == "begin") return BEGINSY;
+    if (lowerWord == "end") return ENDSY;
+    if (lowerWord == "else") return ELSESY;
+    if (lowerWord == "mod") return IMOD;
+    
 
     return IDENT;
 }

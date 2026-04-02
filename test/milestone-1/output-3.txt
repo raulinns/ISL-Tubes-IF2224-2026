@@ -1,0 +1,20 @@
+ifsy
+ident (x)
+gtr
+intcon (0)
+thensy
+beginsy
+whilesy
+ident (x)
+gtr
+intcon (0)
+dosy
+ident (x)
+becomes
+ident (x)
+minus
+intcon (1)
+semicolon
+
+endsy
+semicolon

@@ -162,7 +162,7 @@ inline std::string tokenTypeToString(TokenType t) {
 
         // Komentar & error
         case COMMENT:     return "comment";
-        case TOKEN_ERROR: return "error";
+        case TOKEN_ERROR: return "unknown";
 
         default:          return "unknown";
     }

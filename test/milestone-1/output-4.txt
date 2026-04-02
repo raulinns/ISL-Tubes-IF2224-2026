@@ -1,0 +1,17 @@
+comment ({ ini komentar satu baris })
+varsy
+ident (x)
+colon
+ident (integer)
+semicolon
+
+comment ((* ini komentar
+   multi baris *))
+beginsy
+ident (x)
+becomes
+intcon (5)
+semicolon
+
+endsy
+period

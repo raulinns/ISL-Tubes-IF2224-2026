@@ -1,0 +1,4 @@
+begin
+  { komentar tidak ditutup
+  x := 5;
+end.

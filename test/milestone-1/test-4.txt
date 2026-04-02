@@ -1,0 +1,7 @@
+{ ini komentar satu baris }
+var x : integer;
+(* ini komentar
+   multi baris *)
+begin
+  x := 5;
+end.

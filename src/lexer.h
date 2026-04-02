@@ -23,7 +23,6 @@ class Lexer {
     int line_;          // Nomor baris saat ini (untuk error reporting)
 
     char nextChar();
-    void prevChar(char c);
     bool isEOF() const;
 
     Token readNumber();

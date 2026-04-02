@@ -247,13 +247,11 @@ Token Lexer::readOperatorOrPunct() {
     nextChar();
     return Token(PERIOD, "", startLine);
   case ':': {
-    int nxt = src_.peek();
-    if (nxt == '=') {
-      nextChar();
+    char lookahead = nextChar();
+    if (lookahead == '=') {
       nextChar();
       return Token(BECOMES, "", startLine);
     }
-    nextChar();
     return Token(COLON, "", startLine);
   }
 

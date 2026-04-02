@@ -82,7 +82,14 @@ TokenType Lexer::lookupKeyword(const std::string& lowerWord) {
     if (lowerWord == "and") return ANDSY;
     if (lowerWord == "or") return ORSY;
     if (lowerWord == "mod") return IMOD;
-    
+    if (lowerWord == "const") return CONSTSY;
+    if (lowerWord == "type") return TYPESY;
+    if (lowerWord == "var") return VARSY;
+    if (lowerWord == "function") return FUNCTIONSY;
+    if (lowerWord == "procedure") return PROCEDURESY;
+    if (lowerWord == "array") return ARRAYSY;
+    if (lowerWord == "record") return RECORDSY;
+    if (lowerWord == "program") return PROGRAMSY;
 
     return IDENT;
 }
@@ -104,6 +111,7 @@ Token Lexer::readIdentOrKeyword() {
     } else {
         return Token(type, "", startLine);
     }
+
 }
 
 Token Lexer::readNumber() {
@@ -219,6 +227,38 @@ Token Lexer::readOperatorOrPunct() {
         nextChar();
         return Token(COLON, "", startLine);
     }
+
+    case '>': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(GEQ, "", line_);
+        }
+        return Token(GTR, "", line_);
+    }
+
+    case '<': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(LEQ, "", line_);
+        }
+        if (lookahead == '>') {
+            nextChar();
+            return Token(NEQ, "", line_);
+        }
+        return Token(LSS, "", line_);
+    }
+
+    case '=': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(EQL, "", line_);
+        }
+        return Token(TOKEN_ERROR, std::string(1, startLine), line_);
+    }
+
     default:
         nextChar();
         return Token(TOKEN_ERROR, std::string(1, c), startLine);

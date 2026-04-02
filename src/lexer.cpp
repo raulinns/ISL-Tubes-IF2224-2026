@@ -97,9 +97,6 @@ Token Lexer::readIdentOrKeyword() {
         nextChar();
     }
 
-    if (!isEOF())
-        prevChar(current_);
-
     TokenType type = lookupKeyword(toLower(word));
 
     if (type == IDENT) {
@@ -129,21 +126,13 @@ Token Lexer::readNumber() {
                 numStr += current_;
                 nextChar();
             }
-
-            if (!isEOF())
-                prevChar(current_);
             return Token(REALCON, numStr, startLine);
 
         } else {
             numStr += dot;
-            if (!isEOF())
-                prevChar(current_);
             return Token(TOKEN_ERROR, numStr, startLine);
         }
     }
-
-    if (!isEOF())
-        prevChar(current_);
     return Token(INTCON, numStr, startLine);
 }
 
@@ -168,8 +157,6 @@ Token Lexer::readStringOrChar() {
                 content += '\''; // escaped quote ''
                 nextChar();
             } else {
-                if (!isEOF())
-                    prevChar(current_);
                 break;
             }
         } else {
@@ -190,44 +177,50 @@ Token Lexer::readOperatorOrPunct() {
     char c = current_;
     switch (c) {
     case '+':
+        nextChar();
         return Token(PLUS, "", startLine);
     case '-':
+        nextChar();
         return Token(MINUS, "", startLine);
     case '*':
+        nextChar();
         return Token(TIMES, "", startLine);
     case '/':
+        nextChar();
         return Token(RDIV, "", startLine);
     case '(':
+        nextChar();
         return Token(LPARENT, "", startLine);
     case ')':
+        nextChar();
         return Token(RPARENT, "", startLine);
     case '[':
+        nextChar();
         return Token(LBRACK, "", startLine);
     case ']':
+        nextChar();
         return Token(RBRACK, "", startLine);
     case ',':
+        nextChar();
         return Token(COMMA, "", startLine);
     case ';':
+        nextChar();
         return Token(SEMICOLON, "", startLine);
     case '.':
+        nextChar();
         return Token(PERIOD, "", startLine);
     case ':': {
-        int first = src_.get();
-        int second = src_.get();
-
-        if (second != EOF) {
-            src_.putback(static_cast<char>(second));
-        }
-        if (first != EOF) {
-            src_.putback(static_cast<char>(first));
-        }
-
-        if (first == '=' || (first == ':' && second == '=')) {
+        int nxt = src_.peek();
+        if (nxt == '=') {
+            nextChar();
+            nextChar();
             return Token(BECOMES, "", startLine);
         }
+        nextChar();
         return Token(COLON, "", startLine);
     }
     default:
+        nextChar();
         return Token(TOKEN_ERROR, std::string(1, c), startLine);
     }
 }

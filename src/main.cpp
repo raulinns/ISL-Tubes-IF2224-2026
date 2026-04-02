@@ -7,25 +7,15 @@
 #include <string>
 #include <vector>
 
-// =============================================================================
 // printUsage: menampilkan cara pemakaian program ke stderr
-// =============================================================================
 static void printUsage(const char* programName) {
-    std::cerr << "Penggunaan: " << programName
-              << " <input.txt> [output.txt]\n"
-              << "  input.txt   : file source code bahasa Arion\n"
-              << "  output.txt  : (opsional) file output daftar token\n"
-              << "                Jika tidak diberikan, output ke terminal\n";
+    std::cerr << "Penggunaan: " << programName << " <input.txt> [output.txt]\n" << "  input.txt   : file source code bahasa Arion\n" << "  output.txt  : (opsional) file output daftar token\n" << "                Jika tidak diberikan, output ke terminal\n";
 }
 
-// =============================================================================
 // formatToken: mengonversi satu Token menjadi string output sesuai spesifikasi
-//
-// Format keluaran:
-//   Token tanpa nilai  → "tokenname"          contoh: semicolon
-//   Token dengan nilai → "tokenname (value)"  contoh: intcon (5)
-//                                              contoh: ident (Hello)
-// =============================================================================
+// Token tanpa nilai = "tokenname"; contoh: semicolon
+// Token dengan nilai = "tokenname (value)"; contoh: intcon (5)
+// contoh: ident (Hello)
 static std::string formatToken(const Token& tok) {
     std::string name = tokenTypeToString(tok.type);
 
@@ -35,15 +25,9 @@ static std::string formatToken(const Token& tok) {
     return name;
 }
 
-// =============================================================================
 // writeTokens: menulis daftar token ke stream output (terminal atau file)
-//
-// Aturan pemisah baris sesuai contoh spesifikasi:
-//   - Baris kosong disisipkan setelah token yang menandai akhir "bagian" besar,
-//     yaitu setelah PROGRAMSY, SEMICOLON (pada baris deklarasi), dsb.
-//   - Implementasi sederhana: pisahkan dengan newline tunggal per token;
-//     baris kosong disisipkan setelah SEMICOLON untuk keterbacaan.
-// =============================================================================
+// - Baris kosong disisipkan setelah token yang menandai akhir "bagian" besar, yaitu setelah PROGRAMSY, SEMICOLON (pada baris deklarasi), d;;.
+// ! Pisah sama newline tunggal per token; baris kosong disisipkan setelah SEMICOLON untuk keterbacaan.
 static void writeTokens(const std::vector<Token>& tokens, std::ostream& out) {
     for (std::size_t i = 0; i < tokens.size(); ++i) {
         out << formatToken(tokens[i]) << "\n";
@@ -59,9 +43,7 @@ static void writeTokens(const std::vector<Token>& tokens, std::ostream& out) {
     }
 }
 
-// =============================================================================
 // reportErrors: mencetak ringkasan token error ke stderr setelah tokenisasi
-// =============================================================================
 static void reportErrors(const std::vector<Token>& tokens) {
     bool hasError = false;
     for (const auto& tok : tokens) {
@@ -79,11 +61,9 @@ static void reportErrors(const std::vector<Token>& tokens) {
     }
 }
 
-// =============================================================================
 // main
-// =============================================================================
 int main(int argc, char* argv[]) {
-    // ── 1. Validasi argumen ───────────────────────────────────────────────────
+    // 1. Validasi argumen
     if (argc < 2 || argc > 3) {
         printUsage(argv[0]);
         return EXIT_FAILURE;
@@ -92,7 +72,7 @@ int main(int argc, char* argv[]) {
     const std::string inputFile  = argv[1];
     const std::string outputFile = (argc == 3) ? argv[2] : "";
 
-    // ── 2. Jalankan Lexer ─────────────────────────────────────────────────────
+    // 2. Jalankan Lexer
     std::vector<Token> tokens;
 
     try {
@@ -108,10 +88,10 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
 
-    // ── 3. Laporkan error leksikal (jika ada) ke stderr ──────────────────────
+    // 3. Laporkan error leksikal (jika ada) ke stderr
     reportErrors(tokens);
 
-    // ── 4. Filter: buang token COMMENT dari output ────────────────────────────
+    // 4. Filter: buang token COMMENT dari output
     // Komentar sudah dikenali lexer (untuk error-checking), tapi tidak
     // diteruskan ke tahap selanjutnya (parsing), sesuai perilaku lexer standar.
     std::vector<Token> filtered;
@@ -122,29 +102,26 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // ── 5. Tulis output ───────────────────────────────────────────────────────
+    // 5. Tulis output
     if (outputFile.empty()) {
-        // Tidak ada argumen output → cetak ke terminal (stdout)
-        std::cout << "=== Daftar Token ===\n\n";
+        // Tidak ada argumen output, cetak ke terminal (stdout)
+        std::cout << "----- Daftar Token -----\n\n";
         writeTokens(filtered, std::cout);
-        std::cout << "\n=== Total: " << filtered.size() << " token ===\n";
+        std::cout << "\n----- Total: " << filtered.size() << " token -----\n";
     }
     else {
         // Ada argumen output → tulis ke file .txt
         std::ofstream out(outputFile);
         if (!out.is_open()) {
-            std::cerr << "[ERROR] Tidak dapat membuat file output: "
-                      << outputFile << "\n";
+            std::cerr << "[ERROR] Tidak dapat membuat file output: " << outputFile << "\n";
             return EXIT_FAILURE;
         }
 
         writeTokens(filtered, out);
         out.close();
 
-        // Konfirmasi singkat ke terminal
-        std::cout << "[OK] Tokenisasi selesai. "
-                  << filtered.size() << " token ditulis ke '"
-                  << outputFile << "'\n";
+        // Konfirmasi ke terminal
+        std::cout << "[OK] Tokenisasi selesai. " << filtered.size() << " token ditulis ke '" << outputFile << "'\n";
     }
 
     return EXIT_SUCCESS;

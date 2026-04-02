@@ -1,15 +1,16 @@
 #include "lexer.h"
 #include "token.h"
-
-#include <algorithm>
 #include <cctype>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <algorithm>
 
 // Konstruktor dan Destruktor
 
-Lexer::Lexer(const std::string &filename) : current_('\0'), line_(1) {
+Lexer::Lexer(const std::string& filename)
+    : current_('\0'), line_(1)
+{
     src_.open(filename);
     if (!src_.is_open()) {
         throw std::runtime_error("Tidak dapat membuka file: " + filename);
@@ -17,8 +18,7 @@ Lexer::Lexer(const std::string &filename) : current_('\0'), line_(1) {
 }
 
 Lexer::~Lexer() {
-    if (src_.is_open())
-        src_.close();
+    if (src_.is_open()) src_.close();
 }
 
 char Lexer::nextChar() {
@@ -27,16 +27,14 @@ char Lexer::nextChar() {
         current_ = '\0';
     } else {
         current_ = static_cast<char>(ch);
-        if (current_ == '\n')
-            ++line_;
+        if (current_ == '\n') ++line_;
     }
     return current_;
 }
 
 void Lexer::prevChar(char c) {
-    // Kembalikan satu karakter ke stream (unget)
-    if (c == '\n')
-        --line_;
+    // Kembaliin satu karakter ke stream (unget)
+    if (c == '\n') --line_;
     src_.putback(c);
     current_ = c;
 }
@@ -64,9 +62,28 @@ std::string Lexer::toLower(const std::string &s) {
 // Jika tidak ada yang cocok → IDENT
 // =============================================================================
 
-TokenType Lexer::lookupKeyword(const std::string &lowerWord) {}
+TokenType Lexer::lookupKeyword(const std::string& lowerWord) {
+    // Menerima string lowercase, mengembalikan TokenType keyword kontrol yang sesuai. Jika tidak ada yang cocok, return IDENT.
+    if (lowerWord == "if") return IFSY;
+    if (lowerWord == "case") return CASESY;
+    if (lowerWord == "repeat") return REPEATSY;
+    if (lowerWord == "while") return WHILESY;
+    if (lowerWord == "for") return FORSY;
+    if (lowerWord == "until") return UNTILSY;
+    if (lowerWord == "of") return OFSY;
+    if (lowerWord == "do") return DOSY;
+    if (lowerWord == "to") return TOSY;
+    if (lowerWord == "downto") return DOWNTOSY;
+    if (lowerWord == "then") return THENSY;
+    if (lowerWord == "begin") return BEGINSY;
+    if (lowerWord == "end") return ENDSY;
+    if (lowerWord == "else") return ELSESY;
+    if (lowerWord == "mod") return IMOD;
+    
 
-// Kerjain ini buat masing-masing pembagian tugas
+    return IDENT;
+}
+
 Token Lexer::readIdentOrKeyword() {
     std::string word;
     int startLine = line_;
@@ -165,8 +182,6 @@ Token Lexer::readStringOrChar() {
     }
 }
 
-Token Lexer::readComment(char openChar) {}
-
 Token Lexer::readOperatorOrPunct() {
     int startLine = line_;
     char c = current_;
@@ -184,7 +199,58 @@ Token Lexer::readOperatorOrPunct() {
     }
 }
 
-// Ini placeholder aja, dari AI (belum tentu bener), recheck nanti aja
+
+// Baca 2 tipe, tipe 1 : { ... } and tipe 2 : (* ... *)
+// Parameter openChar: { = tipe 1, caller udah baca { sama ( = tipe 2, caller udah baca ( sama *
+
+Token Lexer::readComment(char openChar) {
+    std::string body;
+    int startLine = line_;
+
+    if (openChar == '{') {
+        // Tipe 1
+        // State: S_CMT1
+        char c = nextChar();
+        while (c != '}' && c != '\0') {
+            body += c;
+            c = nextChar();
+        }
+        if (c == '}') {
+            return Token(COMMENT, "{" + body + "}", startLine);
+        }
+        return Token(TOKEN_ERROR, "Komentar '{' tidak ditutup", startLine);
+
+    } else {
+        // Tipe 2. ( dan * udah tadi sama readOperatorOrPunct
+        // State awal: S_CMT2
+        char c = nextChar();
+        while (true) {
+            if (c == '\0') {
+                return Token(TOKEN_ERROR, "Komentar '(*' tidak ditutup", startLine);
+            }
+            if (c == '*') {
+                // State: S_CMT2_STAR
+                char next = nextChar();
+                if (next == ')') {
+                    return Token(COMMENT, "(*" + body + "*)", startLine);
+                }
+                if (next == '*') {
+                    // teteep di S_CMT2_STAR
+                    body += c;
+                    c = next;
+                    continue;
+                }
+                // Balik ke S_CMT2
+                body += c;
+                c = next;
+                continue;
+            }
+            body += c;
+            c = nextChar();
+        }
+    }
+}
+
 // Kerjain implementasi per orang dulu yang di readXXX
 std::vector<Token> Lexer::tokenize() {
     std::vector<Token> tokens;
@@ -200,25 +266,20 @@ std::vector<Token> Lexer::tokenize() {
 
         if (std::isalpha(static_cast<unsigned char>(c))) {
             tokens.push_back(readIdentOrKeyword());
-            nextChar();
             continue;
         }
 
         if (std::isdigit(static_cast<unsigned char>(c))) {
             tokens.push_back(readNumber());
-            nextChar();
             continue;
         }
 
         if (c == '\'') {
             tokens.push_back(readStringOrChar());
-            nextChar();
             continue;
         }
 
         tokens.push_back(readOperatorOrPunct());
-        nextChar();
-    }
-
+}
     return tokens;
 }

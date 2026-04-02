@@ -1,12 +1,14 @@
 # Arion Interpreter — Milestone 1: Lexical Analysis
 
 IF2224 Teori Bahasa Formal dan Automata | [ISL] TBFO
-![cover](cover.png)
+![](Cover.jpg)
+
 ## Deskripsi Program
 
 Program saat ini sedang dalam proses Milestone 1, di mana kami membuat **lexical analyzer (lexer)** untuk bahasa pemrograman **Arion**, diimplementasikan dalam C++17 menggunakan **Deterministic Finite Automata (DFA)**. Lexer membaca source code Arion karakter per karakter dan menghasilkan daftar token yang akan digunakan pada tahap selanjutnya (parsing).
 
 Lexer mengenali 52 jenis token meliputi:
+
 - Konstanta literal (integer, real, char, string)
 - Identifier dan keywords (kontrol alur, deklarasi)
 - Operator (aritmatika, logika, relasional)
@@ -67,9 +69,9 @@ make clean
 
 ## Pembagian Tugas
 
-| Nama | NIM | Kontribusi |
-|------|-----|-----------|
+| Nama                       | NIM      | Kontribusi                                          |
+| -------------------------- | -------- | --------------------------------------------------- |
 | Narendra Dharma Wistara M. | 13524044 | Infrastructure DFA, literal, identifier, arithmetic |
-| Arghawisesa Dwinanda Arham | 13524100 | Keywords kontrol, komentar, error handling |
-| Nashiruddin Akram | 13524090 | Tanda baca, simbol struktur, logical operator |
-| Steven Tan | 13524060 | Declaration keywords, relational operator |
+| Arghawisesa Dwinanda Arham | 13524100 | Keywords kontrol, komentar, error handling          |
+| Nashiruddin Akram          | 13524090 | Tanda baca, simbol struktur, logical operator       |
+| Steven Tan                 | 13524060 | Declaration keywords, relational operator           |

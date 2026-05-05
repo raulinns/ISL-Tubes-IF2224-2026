@@ -4,8 +4,8 @@ TARGET   := lexer
 SRCDIR   := src
 OBJDIR   := build
 
-SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp
-OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o
+SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp
+OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o
 
 all: $(TARGET)
 
@@ -16,6 +16,12 @@ $(OBJDIR)/main.o: $(SRCDIR)/main.cpp $(SRCDIR)/lexer.h $(SRCDIR)/token.h | $(OBJ
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/lexer.o: $(SRCDIR)/lexer.cpp $(SRCDIR)/lexer.h $(SRCDIR)/token.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/parser.o: $(SRCDIR)/parser.cpp $(SRCDIR)/parser.h $(SRCDIR)/parse_tree.h $(SRCDIR)/token.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/parse_tree.o: $(SRCDIR)/parse_tree.cpp $(SRCDIR)/parse_tree.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR):

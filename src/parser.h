@@ -1,19 +1,12 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "parse_tree.h"
 #include "token.h"
 
 #include <cstddef>
 #include <string>
-#include <utility>
 #include <vector>
-
-struct ParseNode {
-  std::string label;
-  std::vector<ParseNode> children;
-
-  explicit ParseNode(std::string text) : label(std::move(text)) {}
-};
 
 class Parser {
   public:
@@ -25,12 +18,15 @@ class Parser {
     std::vector<Token> tokens_;
     std::size_t pos_;
 
+    // Helper dasar parser.
     const Token &current() const;
     const Token &peek(std::size_t offset = 0) const;
     bool isAtEnd() const;
     bool check(TokenType type) const;
     bool match(TokenType type);
+    void advance();
 
+    // Program dan deklarasi.
     ParseNode parseProgramHeader();
     ParseNode parseDeclarationPart();
     ParseNode parseConstDeclaration();
@@ -45,12 +41,16 @@ class Parser {
     ParseNode parseRecordType();
     ParseNode parseFieldList();
     ParseNode parseFieldPart();
+
+    // Subprogram.
     ParseNode parseSubprogramDeclaration();
     ParseNode parseProcedureDeclaration();
     ParseNode parseFunctionDeclaration();
     ParseNode parseBlock();
     ParseNode parseFormalParameterList();
     ParseNode parseParameterGroup();
+
+    // Statement.
     ParseNode parseCompoundStatement();
     ParseNode parseStatementList(TokenType terminator);
     ParseNode parseStatement();
@@ -63,6 +63,8 @@ class Parser {
     ParseNode parseForStatement();
     ParseNode parseProcedureOrFunctionCall();
     ParseNode parseParameterList();
+
+    // Expression.
     ParseNode parseExpression();
     ParseNode parseSimpleExpression();
     ParseNode parseTerm();
@@ -73,6 +75,7 @@ class Parser {
 
     ParseNode consume(TokenType expected);
     [[noreturn]] void syntaxError(const std::string &message) const;
+    [[noreturn]] void notImplemented(const std::string &ruleName) const;
 
     bool canStartStatement() const;
     bool isStatementFollowToken(TokenType type) const;

@@ -6,9 +6,18 @@
 #include <string>
 #include <vector>
 
+namespace {
+
+bool isSeparator(char c) {
+  return c == '\0' || std::isspace(static_cast<unsigned char>(c));
+}
+
+} // namespace
+
 // Konstruktor dan Destruktor
 
-Lexer::Lexer(const std::string &filename) : current_('\0'), line_(1) {
+Lexer::Lexer(const std::string &filename)
+    : current_('\0'), line_(1), lastTokenType_(TOKEN_ERROR) {
   src_.open(filename);
   if (!src_.is_open()) {
     throw std::runtime_error("Tidak dapat membuka file: " + filename);
@@ -34,6 +43,13 @@ char Lexer::nextChar() {
   return current_;
 }
 
+char Lexer::peekChar() {
+  int ch = src_.peek();
+  if (ch == EOF) {
+    return '\0';
+  }
+  return static_cast<char>(ch);
+}
 
 bool Lexer::isEOF() const { return src_.eof() || current_ == '\0'; }
 
@@ -140,6 +156,7 @@ Token Lexer::readIdentOrKeyword() {
 Token Lexer::readNumber() {
   std::string numStr;
   int startLine = line_;
+  bool isReal = false;
 
   while (!isEOF() && std::isdigit(static_cast<unsigned char>(current_))) {
     numStr += current_;
@@ -147,23 +164,33 @@ Token Lexer::readNumber() {
   }
 
   if (!isEOF() && current_ == '.') {
-    char dot = current_;
-    nextChar();
-    if (!isEOF() && std::isdigit(static_cast<unsigned char>(current_))) {
-      numStr += dot;
+    const char lookahead = peekChar();
+
+    if (std::isdigit(static_cast<unsigned char>(lookahead))) {
+      numStr += current_;
+      nextChar();
 
       while (!isEOF() && std::isdigit(static_cast<unsigned char>(current_))) {
         numStr += current_;
         nextChar();
       }
-      return Token(REALCON, numStr, startLine);
-
+      isReal = true;
+    } else if (lookahead == '.') {
+      return Token(INTCON, numStr, startLine);
     } else {
-      numStr += dot;
-      return Token(TOKEN_ERROR, numStr, startLine);
+      numStr += current_;
+      nextChar();
+      return readUnknownSequence(numStr);
     }
   }
-  return Token(INTCON, numStr, startLine);
+
+  if (!isEOF() &&
+      !isSeparator(current_) &&
+      std::isalnum(static_cast<unsigned char>(current_))) {
+    return readUnknownSequence(numStr);
+  }
+
+  return Token(isReal ? REALCON : INTCON, numStr, startLine);
 }
 
 Token Lexer::readStringOrChar() {
@@ -200,6 +227,23 @@ Token Lexer::readStringOrChar() {
   } else {
     return Token(STRING, "'" + content + "'", startLine);
   }
+}
+
+Token Lexer::readUnknownSequence(const std::string &prefix) {
+  std::string invalid = prefix;
+  const int startLine = line_;
+
+  if (invalid.empty()) {
+    invalid += current_;
+    nextChar();
+  }
+
+  while (!isEOF() && !isSeparator(current_)) {
+    invalid += current_;
+    nextChar();
+  }
+
+  return Token(TOKEN_ERROR, invalid, startLine);
 }
 
 Token Lexer::readOperatorOrPunct() {
@@ -244,6 +288,10 @@ Token Lexer::readOperatorOrPunct() {
     nextChar();
     return Token(SEMICOLON, "", startLine);
   case '.':
+    if (lastTokenType_ != PERIOD &&
+        std::isdigit(static_cast<unsigned char>(peekChar()))) {
+      return readUnknownSequence();
+    }
     nextChar();
     return Token(PERIOD, "", startLine);
   case ':': {
@@ -283,12 +331,11 @@ Token Lexer::readOperatorOrPunct() {
       nextChar();
       return Token(EQL, "", startLine);
     }
-    return Token(TOKEN_ERROR, std::string(1, c), startLine);
+    return readUnknownSequence("=");
   }
 
   default:
-    nextChar();
-    return Token(TOKEN_ERROR, std::string(1, c), startLine);
+    return readUnknownSequence();
   }
 }
 
@@ -374,20 +421,24 @@ std::vector<Token> Lexer::tokenize() {
 
     if (std::isalpha(static_cast<unsigned char>(c))) {
       tokens.push_back(readIdentOrKeyword());
+      lastTokenType_ = tokens.back().type;
       continue;
     }
 
     if (std::isdigit(static_cast<unsigned char>(c))) {
       tokens.push_back(readNumber());
+      lastTokenType_ = tokens.back().type;
       continue;
     }
 
     if (c == '\'') {
       tokens.push_back(readStringOrChar());
+      lastTokenType_ = tokens.back().type;
       continue;
     }
 
     tokens.push_back(readOperatorOrPunct());
+    lastTokenType_ = tokens.back().type;
   }
   return tokens;
 }

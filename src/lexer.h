@@ -21,12 +21,15 @@ class Lexer {
     std::ifstream src_; // Stream file source code
     char current_;      // Karakter yang sedang dibaca oleh DFA
     int line_;          // Nomor baris saat ini (untuk error reporting)
+    TokenType lastTokenType_;
 
     char nextChar();
+    char peekChar();
     bool isEOF() const;
 
     Token readNumber();
     Token readStringOrChar();
+    Token readUnknownSequence(const std::string &prefix = "");
 
     Token readIdentOrKeyword();
 

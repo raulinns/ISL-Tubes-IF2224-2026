@@ -157,25 +157,136 @@ ParseNode Parser::parseFieldList() { notImplemented("<field-list>"); }
 ParseNode Parser::parseFieldPart() { notImplemented("<field-part>"); }
 
 ParseNode Parser::parseSubprogramDeclaration() {
-  notImplemented("<subprogram-declaration>");
+  ParseNode node("<subprogram-declaration>");
+
+  if (check(PROCEDURESY))
+  {
+    node.addChild(parseProcedureDeclaration());
+  } else if (check(FUNCTIONSY))
+  {
+    node.addChild(parseFunctionDeclaration());
+  } else
+  {
+    syntaxError("expected 'procedure' or 'function' in subprogram declaration");
+  }
+
+  return node;
 }
 
 ParseNode Parser::parseProcedureDeclaration() {
-  notImplemented("<procedure-declaration>");
+  ParseNode node("<procedure-declaration>");
+
+  // proceduresy
+  node.addChild(consume(PROCEDURESY));
+
+  // ident (nama prosedur)
+  node.addChild(consume(IDENT));
+
+  // (formal-parameter-list)?. opsional, kalo ada lparent
+  if (check(LPARENT))
+  {
+    node.addChild(parseFormalParameterList());
+  }
+
+  // semicolon
+  node.addChild(consume(SEMICOLON));
+
+  // block
+  node.addChild(parseBlock());
+
+  // semicolon
+  node.addChild(consume(SEMICOLON));
+
+  return node;
 }
 
 ParseNode Parser::parseFunctionDeclaration() {
-  notImplemented("<function-declaration>");
+  ParseNode node("<function-declaration>");
+
+  // functionsy
+  node.addChild(consume(FUNCTIONSY));
+
+  // ident (nama fungsi)
+  node.addChild(consume(IDENT));
+
+  // (formal-parameter-list)?
+  if (check(LPARENT))
+  {
+    node.addChild(parseFormalParameterList());
+  }
+
+  // colon
+  node.addChild(consume(COLON));
+
+  // ident (tipe return)
+  node.addChild(consume(IDENT));
+
+  // semicolon
+  node.addChild(consume(SEMICOLON));
+
+  // block
+  node.addChild(parseBlock());
+
+  // semicolon
+  node.addChild(consume(SEMICOLON));
+
+  return node;
 }
 
-ParseNode Parser::parseBlock() { notImplemented("block"); }
+ParseNode Parser::parseBlock() {
+  ParseNode node("<block>");
+
+  // declaration-part (punya endra tar)
+  node.addChild(parseDeclarationPart());
+
+  // compound-statement (punya akram tar)
+  node.addChild(parseCompoundStatement());
+
+  return node;
+}
 
 ParseNode Parser::parseFormalParameterList() {
-  notImplemented("<formal-parameter-list>");
+  ParseNode node("<formal-parameter-list>");
+
+  // lparent
+  node.addChild(consume(LPARENT));
+
+  // parameter-group pertama (wajib ada minimal satu)
+  node.addChild(parseParameterGroup());
+
+  // (semicolon + parameter-group)*
+  while (check(SEMICOLON))
+  {
+    node.addChild(consume(SEMICOLON));
+    node.addChild(parseParameterGroup());
+  }
+
+  // rparent
+  node.addChild(consume(RPARENT));
+
+  return node;
 }
 
 ParseNode Parser::parseParameterGroup() {
-  notImplemented("<parameter-group>");
+  ParseNode node("<parameter-group>");
+
+  // identifierlist (punya endra tar)
+  node.addChild(parseIdentifierList());
+
+  // colon
+  node.addChild(consume(COLON));
+
+  // tipe: ident atau array-type
+  if (check(ARRAYSY))
+  {
+    // array-type (punya endra tar)
+    node.addChild(parseArrayType());
+  } else {
+    // ident (nama tipe sederhana)
+    node.addChild(consume(IDENT));
+  }
+
+  return node;
 }
 
 ParseNode Parser::parseCompoundStatement() {
@@ -192,21 +303,160 @@ ParseNode Parser::parseAssignmentStatement() {
   notImplemented("<assignment-statement>");
 }
 
-ParseNode Parser::parseIfStatement() { notImplemented("<if-statement>"); }
+ParseNode Parser::parseIfStatement() {
+  ParseNode node("<if-statement>");
 
-ParseNode Parser::parseCaseStatement() { notImplemented("<case-statement>"); }
+  // ifsy
+  node.addChild(consume(IFSY));
 
-ParseNode Parser::parseCaseBlock() { notImplemented("<case-block>"); }
+  // expression (punya steven tar)
+  node.addChild(parseExpression());
+
+  // thensy
+  node.addChild(consume(THENSY));
+
+  // statement (punya akram tar)
+  node.addChild(parseStatement());
+
+  // (elsesy + statement)?
+  if (check(ELSESY))
+  {
+    node.addChild(consume(ELSESY));
+    node.addChild(parseStatement());
+  }
+
+  return node;
+}
+
+ParseNode Parser::parseCaseStatement() {
+  ParseNode node("<case-statement>");
+
+  // casesy
+  node.addChild(consume(CASESY));
+
+  // expression (punya steven tar)
+  node.addChild(parseExpression());
+
+  // ofsy
+  node.addChild(consume(OFSY));
+
+  // case-block
+  node.addChild(parseCaseBlock());
+
+  // endsy
+  node.addChild(consume(ENDSY));
+
+  return node;
+}
+
+ParseNode Parser::parseCaseBlock() {
+  ParseNode node("<case-block>");
+
+  // constant pertama
+  node.addChild(parseConstant());
+
+  // (comma + constant)*
+  while (check(COMMA))
+  {
+    node.addChild(consume(COMMA));
+    node.addChild(parseConstant());
+  }
+
+  // colon
+  node.addChild(consume(COLON));
+
+  // statement (punya akram tar)
+  node.addChild(parseStatement());
+
+  // (semicolon + case-block?)*
+  while (check(SEMICOLON)) {
+      node.addChild(consume(SEMICOLON));
+
+      // case-block?, lanjut kalo ada constant nextnya
+      // (kalo ga ada, berarti ini semicolon trailing sebelum endsy)
+      if (!check(ENDSY) && canStartConstant(current().type))
+      {
+        node.addChild(parseCaseBlock());
+      }
+  }
+
+  return node;
+}
 
 ParseNode Parser::parseWhileStatement() {
-  notImplemented("<while-statement>");
+  ParseNode node("<while-statement>");
+
+  // whilesy
+  node.addChild(consume(WHILESY));
+
+  // expression (punya steven tar)
+  node.addChild(parseExpression());
+
+  // dosy
+  node.addChild(consume(DOSY));
+
+  // statement (punya akram tar)
+  node.addChild(parseStatement());
+
+  return node;
 }
 
 ParseNode Parser::parseRepeatStatement() {
-  notImplemented("<repeat-statement>");
+  ParseNode node("<repeat-statement>");
+
+  // repeatsy
+  node.addChild(consume(REPEATSY));
+
+  // statement-list (punya akram tar)
+  node.addChild(parseStatementList(UNTILSY));
+
+  // untilsy
+  node.addChild(consume(UNTILSY));
+
+  // expression (punya steven tar)
+  node.addChild(parseExpression());
+
+  return node;
 }
 
-ParseNode Parser::parseForStatement() { notImplemented("<for-statement>"); }
+ParseNode Parser::parseForStatement() {
+  ParseNode node("<for-statement>");
+
+  // forsy
+  node.addChild(consume(FORSY));
+
+  // ident (variabel counter)
+  node.addChild(consume(IDENT));
+
+  // becomes (:=)
+  node.addChild(consume(BECOMES));
+
+  // expression, nilai awal (punya steven tar)
+  node.addChild(parseExpression());
+
+  // tosy atau downtosy
+  if (check(TOSY))
+  {
+    node.addChild(consume(TOSY));
+  } else if (check(DOWNTOSY))
+  {
+    node.addChild(consume(DOWNTOSY));
+  } else
+  {
+    syntaxError("expected 'to' or 'downto' in for statement");
+  }
+
+  // expression, nilai akhir (punya steven tar)
+  node.addChild(parseExpression());
+
+  // dosy
+  node.addChild(consume(DOSY));
+
+  // statement (punya akram tar)
+  node.addChild(parseStatement());
+
+  return node;
+}
 
 ParseNode Parser::parseProcedureOrFunctionCall() {
   notImplemented("<procedure/function-call>");

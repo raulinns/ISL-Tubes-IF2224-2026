@@ -1,4 +1,6 @@
 #include "lexer.h"
+#include "parse_tree.h"
+#include "parser.h"
 #include "token.h"
 
 #include <fstream>
@@ -11,41 +13,8 @@
 static void printUsage(const char *programName) {
     std::cerr << "Penggunaan: " << programName << " <input.txt> [output.txt]\n"
               << "  input.txt   : file source code bahasa Arion\n"
-              << "  output.txt  : (opsional) file output daftar token\n"
-              << "                Jika tidak diberikan, output ke terminal\n";
-}
-
-// formatToken: mengonversi satu Token menjadi string output sesuai spesifikasi
-// Token tanpa nilai = "tokenname"; contoh: semicolon
-// Token dengan nilai = "tokenname (value)"; contoh: intcon (5)
-// contoh: ident (Hello)
-static std::string formatToken(const Token &tok) {
-    std::string name = tokenTypeToString(tok.type);
-
-    if (tokenNeedsValue(tok.type) && !tok.value.empty()) {
-        return name + " (" + tok.value + ")";
-    }
-    return name;
-}
-
-// writeTokens: menulis daftar token ke stream output (terminal atau file)
-// - Baris kosong disisipkan setelah token yang menandai akhir "bagian" besar,
-// yaitu setelah PROGRAMSY, SEMICOLON (pada baris deklarasi), d;;. ! Pisah sama
-// newline tunggal per token; baris kosong disisipkan setelah SEMICOLON untuk
-// keterbacaan.
-static void writeTokens(const std::vector<Token> &tokens, std::ostream &out) {
-    for (std::size_t i = 0; i < tokens.size(); ++i) {
-        out << formatToken(tokens[i]) << "\n";
-
-        // Sisipkan baris kosong setelah SEMICOLON agar output lebih mudah
-        // dibaca (mengikuti gaya pada contoh output spesifikasi)
-        if (tokens[i].type == SEMICOLON && i + 1 < tokens.size()) {
-            // Hanya sisipkan jika token berikutnya bukan SEMICOLON
-            if (tokens[i + 1].type != SEMICOLON) {
-                out << "\n";
-            }
-        }
-    }
+              << "  output.txt  : (opsional) file output parse tree\n"
+              << "                Jika tidak diberikan, parse tree output ke terminal\n";
 }
 
 // reportErrors: mencetak ringkasan token error ke stderr setelah tokenisasi
@@ -65,6 +34,15 @@ static void reportErrors(const std::vector<Token> &tokens) {
     if (hasError) {
         std::cerr << "[LEXER] Proses tokenisasi tetap dilanjutkan.\n\n";
     }
+}
+
+static bool hasLexicalError(const std::vector<Token> &tokens) {
+    for (const auto &tok : tokens) {
+        if (tok.type == TOKEN_ERROR) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // main
@@ -95,14 +73,29 @@ int main(int argc, char *argv[]) {
     // 3. Laporkan error leksikal (jika ada) ke stderr
     reportErrors(tokens);
 
+    if (hasLexicalError(tokens)) {
+        std::cerr << "[ERROR] Parsing dibatalkan karena masih ada token "
+                     "leksikal tidak valid.\n";
+        return EXIT_FAILURE;
+    }
+
+    std::string parseTree;
+    try {
+        Parser parser(tokens);
+        parseTree = renderParseTree(parser.parseProgram());
+    } catch (const std::runtime_error &e) {
+        std::cerr << "[PARSER] " << e.what() << "\n";
+        return EXIT_FAILURE;
+    } catch (const std::exception &e) {
+        std::cerr << "[PARSER] Exception tidak terduga: " << e.what() << "\n";
+        return EXIT_FAILURE;
+    }
+
     // 4. Tulis output
     if (outputFile.empty()) {
-        // Tidak ada argumen output, cetak ke terminal (stdout)
-        std::cout << "----- Daftar Token -----\n\n";
-        writeTokens(tokens, std::cout);
-        std::cout << "\n----- Total: " << tokens.size() << " token -----\n";
+        std::cout << "----- Parse Tree -----\n\n";
+        std::cout << parseTree;
     } else {
-        // Ada argumen output → tulis ke file .txt
         std::ofstream out(outputFile);
         if (!out.is_open()) {
             std::cerr << "[ERROR] Tidak dapat membuat file output: "
@@ -110,12 +103,11 @@ int main(int argc, char *argv[]) {
             return EXIT_FAILURE;
         }
 
-        writeTokens(tokens, out);
+        out << parseTree;
         out.close();
 
-        // Konfirmasi ke terminal
-        std::cout << "[OK] Tokenisasi selesai. " << tokens.size()
-                  << " token ditulis ke '" << outputFile << "'\n";
+        std::cout << "[OK] Parsing selesai. Parse tree ditulis ke '"
+                  << outputFile << "'\n";
     }
 
     return EXIT_SUCCESS;

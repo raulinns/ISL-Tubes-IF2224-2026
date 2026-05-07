@@ -41,6 +41,7 @@ class Parser {
     ParseNode parseRecordType();
     ParseNode parseFieldList();
     ParseNode parseFieldPart();
+    ParseNode parseVariable();
 
     // Subprogram.
     ParseNode parseSubprogramDeclaration();

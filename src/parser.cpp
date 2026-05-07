@@ -10,7 +10,7 @@ const Token kEofToken(TOKEN_ERROR, "<EOF>", -1);
 ParseNode makeTokenNode(const Token &token) {
     std::string label = tokenTypeToString(token.type);
     if (tokenNeedsValue(token.type) && !token.value.empty()) {
-        label += " (" + token.value + ")";
+        label += "(" + token.value + ")";
     }
     return ParseNode(label);
 }
@@ -146,21 +146,40 @@ ParseNode Parser::parseProgramHeader() {
 ParseNode Parser::parseDeclarationPart() {
     ParseNode node("<declaration-part>");
 
-    // 1. Konstanta
     if (check(CONSTSY)) {
         node.addChild(parseConstDeclaration());
+    }
+
+    if (check(CONSTSY)) {
+        syntaxError("const declarations must appear in a single section before "
+                    "type, var, and subprogram declarations");
     }
 
     if (check(TYPESY)) {
         node.addChild(parseTypeDeclaration());
     }
 
+    if (check(CONSTSY) || check(TYPESY)) {
+        syntaxError("declarations must be ordered as const, type, var, then "
+                    "subprogram");
+    }
+
     if (check(VARSY)) {
         node.addChild(parseVarDeclaration());
     }
 
+    if (check(CONSTSY) || check(TYPESY) || check(VARSY)) {
+        syntaxError("declarations must be ordered as const, type, var, then "
+                    "subprogram");
+    }
+
     while (check(PROCEDURESY) || check(FUNCTIONSY)) {
         node.addChild(parseSubprogramDeclaration());
+    }
+
+    if (check(CONSTSY) || check(TYPESY) || check(VARSY)) {
+        syntaxError("declarations must be ordered as const, type, var, then "
+                    "subprogram");
     }
 
     return node;
@@ -303,11 +322,45 @@ ParseNode Parser::parseEnumerated() {
     return node;
 }
 
-ParseNode Parser::parseRecordType() { notImplemented("<record-type>"); }
+ParseNode Parser::parseRecordType() {
+    ParseNode node("<record-type>");
 
-ParseNode Parser::parseFieldList() { notImplemented("<field-list>"); }
+    node.addChild(consume(RECORDSY));
+    node.addChild(parseFieldList());
+    node.addChild(consume(ENDSY));
 
-ParseNode Parser::parseFieldPart() { notImplemented("<field-part>"); }
+    return node;
+}
+
+ParseNode Parser::parseFieldList() {
+    ParseNode node("<field-list>");
+
+    if (check(ENDSY)) {
+        return node;
+    }
+
+    node.addChild(parseFieldPart());
+
+    while (check(SEMICOLON)) {
+        node.addChild(consume(SEMICOLON));
+        if (check(ENDSY)) {
+            break;
+        }
+        node.addChild(parseFieldPart());
+    }
+
+    return node;
+}
+
+ParseNode Parser::parseFieldPart() {
+    ParseNode node("<field-part>");
+
+    node.addChild(parseIdentifierList());
+    node.addChild(consume(COLON));
+    node.addChild(parseType());
+
+    return node;
+}
 
 ParseNode Parser::parseSubprogramDeclaration() {
     ParseNode node("<subprogram-declaration>");
@@ -476,7 +529,28 @@ ParseNode Parser::parseStatement() {
     }
 
     if (check(IDENT)) {
-        if (peek(1).type == BECOMES) {
+        std::size_t index = 1;
+        while (true) {
+            if (peek(index).type == LBRACK) {
+                int depth = 1;
+                ++index;
+                while (depth > 0 && peek(index).type != TOKEN_ERROR) {
+                    if (peek(index).type == LBRACK) {
+                        ++depth;
+                    } else if (peek(index).type == RBRACK) {
+                        --depth;
+                    }
+                    ++index;
+                }
+            } else if (peek(index).type == PERIOD &&
+                       peek(index + 1).type == IDENT) {
+                index += 2;
+            } else {
+                break;
+            }
+        }
+
+        if (peek(index).type == BECOMES) {
             node.addChild(parseAssignmentStatement());
         } else {
             node.addChild(parseProcedureOrFunctionCall());
@@ -503,9 +577,49 @@ ParseNode Parser::parseStatement() {
 ParseNode Parser::parseAssignmentStatement() {
     ParseNode node("<assignment-statement>");
 
-    node.addChild(consume(IDENT));
+    node.addChild(parseVariable());
     node.addChild(consume(BECOMES));
     node.addChild(parseExpression());
+
+    return node;
+}
+
+ParseNode Parser::parseVariable() {
+    ParseNode node("<variable>");
+
+    node.addChild(consume(IDENT));
+
+    while (check(LBRACK) || check(PERIOD)) {
+        ParseNode component("<component-variable>");
+
+        if (check(LBRACK)) {
+            component.addChild(consume(LBRACK));
+
+            ParseNode indexList("<index-list>");
+            if (check(INTCON) || check(CHARCON) || check(IDENT)) {
+                indexList.addChild(consume(current().type));
+            } else {
+                syntaxError("expected array index");
+            }
+
+            while (check(COMMA)) {
+                indexList.addChild(consume(COMMA));
+                if (check(INTCON) || check(CHARCON) || check(IDENT)) {
+                    indexList.addChild(consume(current().type));
+                } else {
+                    syntaxError("expected array index");
+                }
+            }
+
+            component.addChild(indexList);
+            component.addChild(consume(RBRACK));
+        } else {
+            component.addChild(consume(PERIOD));
+            component.addChild(consume(IDENT));
+        }
+
+        node.addChild(component);
+    }
 
     return node;
 }
@@ -751,42 +865,7 @@ ParseNode Parser::parseFactor() {
         node.addChild(parseProcedureOrFunctionCall());
     } else if (check(IDENT) &&
                (peek(1).type == LBRACK || peek(1).type == PERIOD)) {
-        ParseNode variable("<variable>");
-        variable.addChild(consume(IDENT));
-
-        while (check(LBRACK) || check(PERIOD)) {
-            ParseNode component("<component-variable>");
-
-            if (check(LBRACK)) {
-                component.addChild(consume(LBRACK));
-
-                ParseNode indexList("<index-list>");
-                if (check(INTCON) || check(CHARCON) || check(IDENT)) {
-                    indexList.addChild(consume(current().type));
-                } else {
-                    syntaxError("expected index");
-                }
-
-                while (check(COMMA)) {
-                    indexList.addChild(consume(COMMA));
-                    if (check(INTCON) || check(CHARCON) || check(IDENT)) {
-                        indexList.addChild(consume(current().type));
-                    } else {
-                        syntaxError("expected index");
-                    }
-                }
-
-                component.addChild(indexList);
-                component.addChild(consume(RBRACK));
-            } else {
-                component.addChild(consume(PERIOD));
-                component.addChild(consume(IDENT));
-            }
-
-            variable.addChild(component);
-        }
-
-        node.addChild(variable);
+        node.addChild(parseVariable());
     } else if (check(IDENT)) {
         node.addChild(consume(IDENT));
     } else {

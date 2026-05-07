@@ -552,8 +552,10 @@ ParseNode Parser::parseStatement() {
 
         if (peek(index).type == BECOMES) {
             node.addChild(parseAssignmentStatement());
-        } else {
+        } else if (peek(index).type == LPARENT) {
             node.addChild(parseProcedureOrFunctionCall());
+        } else{
+            node.addChild(consume(IDENT));
         }
     } else if (check(BEGINSY)) {
         node.addChild(parseCompoundStatement());

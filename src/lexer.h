@@ -33,7 +33,8 @@ class Lexer {
 
     Token readIdentOrKeyword();
 
-    // Fungsi pembantu ubah string ke lowercase untuk perbandingan case-insensitive
+    // Fungsi pembantu ubah string ke lowercase untuk perbandingan
+    // case-insensitive
     static std::string toLower(const std::string &s);
 
     // Fungsi pembantu untuk keyword Arion.
@@ -45,4 +46,3 @@ class Lexer {
 };
 
 #endif // LEXER_H
-

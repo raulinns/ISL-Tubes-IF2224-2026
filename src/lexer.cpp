@@ -9,7 +9,7 @@
 namespace {
 
 bool isSeparator(char c) {
-  return c == '\0' || std::isspace(static_cast<unsigned char>(c));
+    return c == '\0' || std::isspace(static_cast<unsigned char>(c));
 }
 
 } // namespace
@@ -18,46 +18,46 @@ bool isSeparator(char c) {
 
 Lexer::Lexer(const std::string &filename)
     : current_('\0'), line_(1), lastTokenType_(TOKEN_ERROR) {
-  src_.open(filename);
-  if (!src_.is_open()) {
-    throw std::runtime_error("Tidak dapat membuka file: " + filename);
-  }
+    src_.open(filename);
+    if (!src_.is_open()) {
+        throw std::runtime_error("Tidak dapat membuka file: " + filename);
+    }
 }
 
 Lexer::~Lexer() {
-  if (src_.is_open()) {
-    src_.close();
-  }
+    if (src_.is_open()) {
+        src_.close();
+    }
 }
 
 char Lexer::nextChar() {
-  int ch = src_.get();
-  if (ch == EOF) {
-    current_ = '\0';
-  } else {
-    current_ = static_cast<char>(ch);
-    if (current_ == '\n') {
-      ++line_;
+    int ch = src_.get();
+    if (ch == EOF) {
+        current_ = '\0';
+    } else {
+        current_ = static_cast<char>(ch);
+        if (current_ == '\n') {
+            ++line_;
+        }
     }
-  }
-  return current_;
+    return current_;
 }
 
 char Lexer::peekChar() {
-  int ch = src_.peek();
-  if (ch == EOF) {
-    return '\0';
-  }
-  return static_cast<char>(ch);
+    int ch = src_.peek();
+    if (ch == EOF) {
+        return '\0';
+    }
+    return static_cast<char>(ch);
 }
 
 bool Lexer::isEOF() const { return src_.eof() || current_ == '\0'; }
 
 std::string Lexer::toLower(const std::string &s) {
-  std::string result = s;
-  std::transform(result.begin(), result.end(), result.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  return result;
+    std::string result = s;
+    std::transform(result.begin(), result.end(), result.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    return result;
 }
 
 // =============================================================================
@@ -75,268 +75,268 @@ std::string Lexer::toLower(const std::string &s) {
 // =============================================================================
 
 TokenType Lexer::lookupKeyword(const std::string &lowerWord) {
-  // Menerima string lowercase, mengembalikan TokenType keyword kontrol yang
-  // sesuai. Jika tidak ada yang cocok, return IDENT.
-  if (lowerWord == "if")
-    return IFSY;
-  if (lowerWord == "case")
-    return CASESY;
-  if (lowerWord == "repeat")
-    return REPEATSY;
-  if (lowerWord == "while")
-    return WHILESY;
-  if (lowerWord == "for")
-    return FORSY;
-  if (lowerWord == "until")
-    return UNTILSY;
-  if (lowerWord == "of")
-    return OFSY;
-  if (lowerWord == "do")
-    return DOSY;
-  if (lowerWord == "to")
-    return TOSY;
-  if (lowerWord == "downto")
-    return DOWNTOSY;
-  if (lowerWord == "then")
-    return THENSY;
-  if (lowerWord == "begin")
-    return BEGINSY;
-  if (lowerWord == "end")
-    return ENDSY;
-  if (lowerWord == "else")
-    return ELSESY;
-  if (lowerWord == "not")
-    return NOTSY;
-  if (lowerWord == "and")
-    return ANDSY;
-  if (lowerWord == "or")
-    return ORSY;
-  if (lowerWord == "div")
-    return IDIV;
-  if (lowerWord == "mod")
-    return IMOD;
-  if (lowerWord == "const")
-    return CONSTSY;
-  if (lowerWord == "type")
-    return TYPESY;
-  if (lowerWord == "var")
-    return VARSY;
-  if (lowerWord == "function")
-    return FUNCTIONSY;
-  if (lowerWord == "procedure")
-    return PROCEDURESY;
-  if (lowerWord == "array")
-    return ARRAYSY;
-  if (lowerWord == "record")
-    return RECORDSY;
-  if (lowerWord == "program")
-    return PROGRAMSY;
+    // Menerima string lowercase, mengembalikan TokenType keyword kontrol yang
+    // sesuai. Jika tidak ada yang cocok, return IDENT.
+    if (lowerWord == "if")
+        return IFSY;
+    if (lowerWord == "case")
+        return CASESY;
+    if (lowerWord == "repeat")
+        return REPEATSY;
+    if (lowerWord == "while")
+        return WHILESY;
+    if (lowerWord == "for")
+        return FORSY;
+    if (lowerWord == "until")
+        return UNTILSY;
+    if (lowerWord == "of")
+        return OFSY;
+    if (lowerWord == "do")
+        return DOSY;
+    if (lowerWord == "to")
+        return TOSY;
+    if (lowerWord == "downto")
+        return DOWNTOSY;
+    if (lowerWord == "then")
+        return THENSY;
+    if (lowerWord == "begin")
+        return BEGINSY;
+    if (lowerWord == "end")
+        return ENDSY;
+    if (lowerWord == "else")
+        return ELSESY;
+    if (lowerWord == "not")
+        return NOTSY;
+    if (lowerWord == "and")
+        return ANDSY;
+    if (lowerWord == "or")
+        return ORSY;
+    if (lowerWord == "div")
+        return IDIV;
+    if (lowerWord == "mod")
+        return IMOD;
+    if (lowerWord == "const")
+        return CONSTSY;
+    if (lowerWord == "type")
+        return TYPESY;
+    if (lowerWord == "var")
+        return VARSY;
+    if (lowerWord == "function")
+        return FUNCTIONSY;
+    if (lowerWord == "procedure")
+        return PROCEDURESY;
+    if (lowerWord == "array")
+        return ARRAYSY;
+    if (lowerWord == "record")
+        return RECORDSY;
+    if (lowerWord == "program")
+        return PROGRAMSY;
 
-  return IDENT;
+    return IDENT;
 }
 
 Token Lexer::readIdentOrKeyword() {
-  std::string word;
-  int startLine = line_;
+    std::string word;
+    int startLine = line_;
 
-  while (!isEOF() && std::isalnum(static_cast<unsigned char>(current_))) {
-    word += current_;
-    nextChar();
-  }
+    while (!isEOF() && std::isalnum(static_cast<unsigned char>(current_))) {
+        word += current_;
+        nextChar();
+    }
 
-  TokenType type = lookupKeyword(toLower(word));
+    TokenType type = lookupKeyword(toLower(word));
 
-  if (type == IDENT) {
-    return Token(IDENT, word, startLine);
-  } else {
-    return Token(type, "", startLine);
-  }
+    if (type == IDENT) {
+        return Token(IDENT, word, startLine);
+    } else {
+        return Token(type, "", startLine);
+    }
 }
 
 Token Lexer::readNumber() {
-  std::string numStr;
-  int startLine = line_;
-  bool isReal = false;
+    std::string numStr;
+    int startLine = line_;
+    bool isReal = false;
 
-  while (!isEOF() && std::isdigit(static_cast<unsigned char>(current_))) {
-    numStr += current_;
-    nextChar();
-  }
-
-  if (!isEOF() && current_ == '.') {
-    const char lookahead = peekChar();
-
-    if (std::isdigit(static_cast<unsigned char>(lookahead))) {
-      numStr += current_;
-      nextChar();
-
-      while (!isEOF() && std::isdigit(static_cast<unsigned char>(current_))) {
+    while (!isEOF() && std::isdigit(static_cast<unsigned char>(current_))) {
         numStr += current_;
         nextChar();
-      }
-      isReal = true;
-    } else if (lookahead == '.') {
-      return Token(INTCON, numStr, startLine);
-    } else {
-      numStr += current_;
-      nextChar();
-      return readUnknownSequence(numStr);
     }
-  }
 
-  if (!isEOF() &&
-      !isSeparator(current_) &&
-      std::isalnum(static_cast<unsigned char>(current_))) {
-    return readUnknownSequence(numStr);
-  }
+    if (!isEOF() && current_ == '.') {
+        const char lookahead = peekChar();
 
-  return Token(isReal ? REALCON : INTCON, numStr, startLine);
+        if (std::isdigit(static_cast<unsigned char>(lookahead))) {
+            numStr += current_;
+            nextChar();
+
+            while (!isEOF() &&
+                   std::isdigit(static_cast<unsigned char>(current_))) {
+                numStr += current_;
+                nextChar();
+            }
+            isReal = true;
+        } else if (lookahead == '.') {
+            return Token(INTCON, numStr, startLine);
+        } else {
+            numStr += current_;
+            nextChar();
+            return readUnknownSequence(numStr);
+        }
+    }
+
+    if (!isEOF() && !isSeparator(current_) &&
+        std::isalnum(static_cast<unsigned char>(current_))) {
+        return readUnknownSequence(numStr);
+    }
+
+    return Token(isReal ? REALCON : INTCON, numStr, startLine);
 }
 
 Token Lexer::readStringOrChar() {
-  std::string content;
-  int startLine = line_;
+    std::string content;
+    int startLine = line_;
 
-  nextChar();
+    nextChar();
 
-  while (true) {
-    if (isEOF()) {
-      return Token(TOKEN_ERROR,
-                   "unterminated string/char at line " +
-                       std::to_string(startLine),
-                   startLine);
+    while (true) {
+        if (isEOF()) {
+            return Token(TOKEN_ERROR,
+                         "unterminated string/char at line " +
+                             std::to_string(startLine),
+                         startLine);
+        }
+
+        if (current_ == '\'') {
+            nextChar();
+
+            if (!isEOF() && current_ == '\'') {
+                content += '\''; // escaped quote ''
+                nextChar();
+            } else {
+                break;
+            }
+        } else {
+            content += current_;
+            nextChar();
+        }
     }
 
-    if (current_ == '\'') {
-      nextChar();
-
-      if (!isEOF() && current_ == '\'') {
-        content += '\''; // escaped quote ''
-        nextChar();
-      } else {
-        break;
-      }
+    if (content.size() == 1) {
+        return Token(CHARCON, "'" + content + "'", startLine);
     } else {
-      content += current_;
-      nextChar();
+        return Token(STRING, "'" + content + "'", startLine);
     }
-  }
-
-  if (content.size() == 1) {
-    return Token(CHARCON, "'" + content + "'", startLine);
-  } else {
-    return Token(STRING, "'" + content + "'", startLine);
-  }
 }
 
 Token Lexer::readUnknownSequence(const std::string &prefix) {
-  std::string invalid = prefix;
-  const int startLine = line_;
+    std::string invalid = prefix;
+    const int startLine = line_;
 
-  if (invalid.empty()) {
-    invalid += current_;
-    nextChar();
-  }
+    if (invalid.empty()) {
+        invalid += current_;
+        nextChar();
+    }
 
-  while (!isEOF() && !isSeparator(current_)) {
-    invalid += current_;
-    nextChar();
-  }
+    while (!isEOF() && !isSeparator(current_)) {
+        invalid += current_;
+        nextChar();
+    }
 
-  return Token(TOKEN_ERROR, invalid, startLine);
+    return Token(TOKEN_ERROR, invalid, startLine);
 }
 
 Token Lexer::readOperatorOrPunct() {
-  int startLine = line_;
-  char c = current_;
-  switch (c) {
-  case '+':
-    nextChar();
-    return Token(PLUS, "", startLine);
-  case '-':
-    nextChar();
-    return Token(MINUS, "", startLine);
-  case '*':
-    nextChar();
-    return Token(TIMES, "", startLine);
-  case '/':
-    nextChar();
-    return Token(RDIV, "", startLine);
-  case '{':
-    nextChar();
-    return readComment('{');
-  case '(':
-    nextChar();
-    if (!isEOF() && current_ == '*') {
-      nextChar();
-      return readComment('(');
+    int startLine = line_;
+    char c = current_;
+    switch (c) {
+    case '+':
+        nextChar();
+        return Token(PLUS, "", startLine);
+    case '-':
+        nextChar();
+        return Token(MINUS, "", startLine);
+    case '*':
+        nextChar();
+        return Token(TIMES, "", startLine);
+    case '/':
+        nextChar();
+        return Token(RDIV, "", startLine);
+    case '{':
+        nextChar();
+        return readComment('{');
+    case '(':
+        nextChar();
+        if (!isEOF() && current_ == '*') {
+            nextChar();
+            return readComment('(');
+        }
+        return Token(LPARENT, "", startLine);
+    case ')':
+        nextChar();
+        return Token(RPARENT, "", startLine);
+    case '[':
+        nextChar();
+        return Token(LBRACK, "", startLine);
+    case ']':
+        nextChar();
+        return Token(RBRACK, "", startLine);
+    case ',':
+        nextChar();
+        return Token(COMMA, "", startLine);
+    case ';':
+        nextChar();
+        return Token(SEMICOLON, "", startLine);
+    case '.':
+        if (lastTokenType_ != PERIOD &&
+            std::isdigit(static_cast<unsigned char>(peekChar()))) {
+            return readUnknownSequence();
+        }
+        nextChar();
+        return Token(PERIOD, "", startLine);
+    case ':': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(BECOMES, "", startLine);
+        }
+        return Token(COLON, "", startLine);
     }
-    return Token(LPARENT, "", startLine);
-  case ')':
-    nextChar();
-    return Token(RPARENT, "", startLine);
-  case '[':
-    nextChar();
-    return Token(LBRACK, "", startLine);
-  case ']':
-    nextChar();
-    return Token(RBRACK, "", startLine);
-  case ',':
-    nextChar();
-    return Token(COMMA, "", startLine);
-  case ';':
-    nextChar();
-    return Token(SEMICOLON, "", startLine);
-  case '.':
-    if (lastTokenType_ != PERIOD &&
-        std::isdigit(static_cast<unsigned char>(peekChar()))) {
-      return readUnknownSequence();
-    }
-    nextChar();
-    return Token(PERIOD, "", startLine);
-  case ':': {
-    char lookahead = nextChar();
-    if (lookahead == '=') {
-      nextChar();
-      return Token(BECOMES, "", startLine);
-    }
-    return Token(COLON, "", startLine);
-  }
 
-  case '>': {
-    char lookahead = nextChar();
-    if (lookahead == '=') {
-      nextChar();
-      return Token(GEQ, "", startLine);
+    case '>': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(GEQ, "", startLine);
+        }
+        return Token(GTR, "", startLine);
     }
-    return Token(GTR, "", startLine);
-  }
 
-  case '<': {
-    char lookahead = nextChar();
-    if (lookahead == '=') {
-      nextChar();
-      return Token(LEQ, "", startLine);
+    case '<': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(LEQ, "", startLine);
+        }
+        if (lookahead == '>') {
+            nextChar();
+            return Token(NEQ, "", startLine);
+        }
+        return Token(LSS, "", startLine);
     }
-    if (lookahead == '>') {
-      nextChar();
-      return Token(NEQ, "", startLine);
-    }
-    return Token(LSS, "", startLine);
-  }
 
-  case '=': {
-    char lookahead = nextChar();
-    if (lookahead == '=') {
-      nextChar();
-      return Token(EQL, "", startLine);
+    case '=': {
+        char lookahead = nextChar();
+        if (lookahead == '=') {
+            nextChar();
+            return Token(EQL, "", startLine);
+        }
+        return readUnknownSequence("=");
     }
-    return readUnknownSequence("=");
-  }
 
-  default:
-    return readUnknownSequence();
-  }
+    default:
+        return readUnknownSequence();
+    }
 }
 
 // Baca 2 tipe, tipe 1 : { ... } and tipe 2 : (* ... *)
@@ -344,101 +344,104 @@ Token Lexer::readOperatorOrPunct() {
 // udah baca ( sama *
 
 Token Lexer::readComment(char openChar) {
-  std::string body;
-  int startLine = line_;
+    std::string body;
+    int startLine = line_;
 
-  if (openChar == '{') {
-    // Tipe 1
-    // State: qCB
-    // current_ sudah berisi char pertama setelah '{' (di-advance oleh caller)
-    char c = current_;
-    while (c != '}' && c != '\0') {
-      body += c;
-      c = nextChar();
-    }
-
-    // qCB + '}' -> accept, masuk COMMENT
-    // qCB + EOF -> TOKEN_ERROR
-    if (c == '}') {
-      nextChar();
-      return Token(COMMENT, "{" + body + "}", startLine);
-    }
-    return Token(TOKEN_ERROR, "Komentar '{' tidak ditutup", startLine);
-
-  } else {
-    // Tipe 2. ( dan * udah tadi sama readOperatorOrPunct
-    // State awal: qCP1
-    // current_ sudah berisi char pertama setelah '*' (di-advance oleh caller)
-    char c = current_;
-    while (true) {
-
-      // qCP1 + EOF -> TOKEN_ERROR
-      // qCP1 + '*' -> pindah ke qCP2
-      // qCP1 + lainnya -> tetep qCP1 (loop)
-      if (c == '\0') {
-        return Token(TOKEN_ERROR, "Komentar '(*' tidak ditutup", startLine);
-      }
-      if (c == '*') {
-        // State: qCP2
-        char next = nextChar();
-
-        // qCP2 + ')' -> accept masuk COMMENT
-        // qCP2 + '*' -> tetep qCP2
-        // qCP2 + lainnya -> balik qCP1
-        if (next == ')') {
-          nextChar();
-          return Token(COMMENT, "(*" + body + "*)", startLine);
+    if (openChar == '{') {
+        // Tipe 1
+        // State: qCB
+        // current_ sudah berisi char pertama setelah '{' (di-advance oleh
+        // caller)
+        char c = current_;
+        while (c != '}' && c != '\0') {
+            body += c;
+            c = nextChar();
         }
-        if (next == '*') {
-          // teteep di qCP2
-          body += c;
-          c = next;
-          continue;
+
+        // qCB + '}' -> accept, masuk COMMENT
+        // qCB + EOF -> TOKEN_ERROR
+        if (c == '}') {
+            nextChar();
+            return Token(COMMENT, "{" + body + "}", startLine);
         }
-        // Balik ke qCP1
-        body += c;
-        c = next;
-        continue;
-      }
-      body += c;
-      c = nextChar();
+        return Token(TOKEN_ERROR, "Komentar '{' tidak ditutup", startLine);
+
+    } else {
+        // Tipe 2. ( dan * udah tadi sama readOperatorOrPunct
+        // State awal: qCP1
+        // current_ sudah berisi char pertama setelah '*' (di-advance oleh
+        // caller)
+        char c = current_;
+        while (true) {
+
+            // qCP1 + EOF -> TOKEN_ERROR
+            // qCP1 + '*' -> pindah ke qCP2
+            // qCP1 + lainnya -> tetep qCP1 (loop)
+            if (c == '\0') {
+                return Token(TOKEN_ERROR, "Komentar '(*' tidak ditutup",
+                             startLine);
+            }
+            if (c == '*') {
+                // State: qCP2
+                char next = nextChar();
+
+                // qCP2 + ')' -> accept masuk COMMENT
+                // qCP2 + '*' -> tetep qCP2
+                // qCP2 + lainnya -> balik qCP1
+                if (next == ')') {
+                    nextChar();
+                    return Token(COMMENT, "(*" + body + "*)", startLine);
+                }
+                if (next == '*') {
+                    // teteep di qCP2
+                    body += c;
+                    c = next;
+                    continue;
+                }
+                // Balik ke qCP1
+                body += c;
+                c = next;
+                continue;
+            }
+            body += c;
+            c = nextChar();
+        }
     }
-  }
 }
 
 // Kerjain implementasi per orang dulu yang di readXXX
 std::vector<Token> Lexer::tokenize() {
-  std::vector<Token> tokens;
-  nextChar();
+    std::vector<Token> tokens;
+    nextChar();
 
-  while (!isEOF()) {
-    char c = current_;
+    while (!isEOF()) {
+        char c = current_;
 
-    if (std::isspace(static_cast<unsigned char>(c))) {
-      nextChar();
-      continue;
+        if (std::isspace(static_cast<unsigned char>(c))) {
+            nextChar();
+            continue;
+        }
+
+        if (std::isalpha(static_cast<unsigned char>(c))) {
+            tokens.push_back(readIdentOrKeyword());
+            lastTokenType_ = tokens.back().type;
+            continue;
+        }
+
+        if (std::isdigit(static_cast<unsigned char>(c))) {
+            tokens.push_back(readNumber());
+            lastTokenType_ = tokens.back().type;
+            continue;
+        }
+
+        if (c == '\'') {
+            tokens.push_back(readStringOrChar());
+            lastTokenType_ = tokens.back().type;
+            continue;
+        }
+
+        tokens.push_back(readOperatorOrPunct());
+        lastTokenType_ = tokens.back().type;
     }
-
-    if (std::isalpha(static_cast<unsigned char>(c))) {
-      tokens.push_back(readIdentOrKeyword());
-      lastTokenType_ = tokens.back().type;
-      continue;
-    }
-
-    if (std::isdigit(static_cast<unsigned char>(c))) {
-      tokens.push_back(readNumber());
-      lastTokenType_ = tokens.back().type;
-      continue;
-    }
-
-    if (c == '\'') {
-      tokens.push_back(readStringOrChar());
-      lastTokenType_ = tokens.back().type;
-      continue;
-    }
-
-    tokens.push_back(readOperatorOrPunct());
-    lastTokenType_ = tokens.back().type;
-  }
-  return tokens;
+    return tokens;
 }

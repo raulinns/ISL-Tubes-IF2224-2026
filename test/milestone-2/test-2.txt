@@ -7,7 +7,11 @@ begin
   else
     x := 0;
   while x > 0 do
-    x := x - 1;
+  begin
+    x := x - 1
+  end;
   for i := 1 to 5 do
+  begin
     x := x + i
+  end
 end.

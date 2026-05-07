@@ -74,21 +74,25 @@
 |   |   |       |           \-- <factor>
 |   |   |       |               \-- intcon(0)
 |   |   |       |-- dosy
-|   |   |       \-- <statement>
-|   |   |           \-- <assignment-statement>
-|   |   |               |-- <variable>
-|   |   |               |   \-- ident(x)
-|   |   |               |-- becomes
-|   |   |               \-- <expression>
-|   |   |                   \-- <simple-expression>
-|   |   |                       |-- <term>
-|   |   |                       |   \-- <factor>
-|   |   |                       |       \-- ident(x)
-|   |   |                       |-- <additive-operator>
-|   |   |                       |   \-- minus
-|   |   |                       \-- <term>
-|   |   |                           \-- <factor>
-|   |   |                               \-- intcon(1)
+|   |   |       \-- <compound-statement>
+|   |   |           |-- beginsy
+|   |   |           |-- <statement-list>
+|   |   |           |   \-- <statement>
+|   |   |           |       \-- <assignment-statement>
+|   |   |           |           |-- <variable>
+|   |   |           |           |   \-- ident(x)
+|   |   |           |           |-- becomes
+|   |   |           |           \-- <expression>
+|   |   |           |               \-- <simple-expression>
+|   |   |           |                   |-- <term>
+|   |   |           |                   |   \-- <factor>
+|   |   |           |                   |       \-- ident(x)
+|   |   |           |                   |-- <additive-operator>
+|   |   |           |                   |   \-- minus
+|   |   |           |                   \-- <term>
+|   |   |           |                       \-- <factor>
+|   |   |           |                           \-- intcon(1)
+|   |   |           \-- endsy
 |   |   |-- semicolon
 |   |   \-- <statement>
 |   |       \-- <for-statement>
@@ -107,20 +111,24 @@
 |   |           |           \-- <factor>
 |   |           |               \-- intcon(5)
 |   |           |-- dosy
-|   |           \-- <statement>
-|   |               \-- <assignment-statement>
-|   |                   |-- <variable>
-|   |                   |   \-- ident(x)
-|   |                   |-- becomes
-|   |                   \-- <expression>
-|   |                       \-- <simple-expression>
-|   |                           |-- <term>
-|   |                           |   \-- <factor>
-|   |                           |       \-- ident(x)
-|   |                           |-- <additive-operator>
-|   |                           |   \-- plus
-|   |                           \-- <term>
-|   |                               \-- <factor>
-|   |                                   \-- ident(i)
+|   |           \-- <compound-statement>
+|   |               |-- beginsy
+|   |               |-- <statement-list>
+|   |               |   \-- <statement>
+|   |               |       \-- <assignment-statement>
+|   |               |           |-- <variable>
+|   |               |           |   \-- ident(x)
+|   |               |           |-- becomes
+|   |               |           \-- <expression>
+|   |               |               \-- <simple-expression>
+|   |               |                   |-- <term>
+|   |               |                   |   \-- <factor>
+|   |               |                   |       \-- ident(x)
+|   |               |                   |-- <additive-operator>
+|   |               |                   |   \-- plus
+|   |               |                   \-- <term>
+|   |               |                       \-- <factor>
+|   |               |                           \-- ident(i)
+|   |               \-- endsy
 |   \-- endsy
 \-- period

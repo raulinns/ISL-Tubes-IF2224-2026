@@ -1,6 +1,6 @@
 CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra -O2
-TARGET   := lexer
+TARGET   := arion
 SRCDIR   := src
 OBJDIR   := build
 

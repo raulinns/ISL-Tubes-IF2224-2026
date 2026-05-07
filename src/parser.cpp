@@ -437,17 +437,77 @@ ParseNode Parser::parseParameterGroup() {
 }
 
 ParseNode Parser::parseCompoundStatement() {
-    notImplemented("<compound-statement>");
+    ParseNode node("<compound-statement>");
+
+    node.addChild(consume(BEGINSY));
+    node.addChild(parseStatementList(ENDSY));
+    node.addChild(consume(ENDSY));
+
+    return node;
 }
 
-ParseNode Parser::parseStatementList(TokenType) {
-    notImplemented("<statement-list>");
+ParseNode Parser::parseStatementList(TokenType terminator) {
+    ParseNode node("<statement-list>");
+
+    if (check(terminator)) {
+        return node;
+    }
+
+    node.addChild(parseStatement());
+
+    while (check(SEMICOLON)) {
+        node.addChild(consume(SEMICOLON));
+
+        if (check(terminator)) {
+            break;
+        }
+
+        node.addChild(parseStatement());
+    }
+
+    return node;
 }
 
-ParseNode Parser::parseStatement() { notImplemented("<statement>"); }
+ParseNode Parser::parseStatement() {
+    ParseNode node("<statement>");
+
+    if (isStatementFollowToken(current().type)) {
+        return node;
+    }
+
+    if (check(IDENT)) {
+        if (peek(1).type == BECOMES) {
+            node.addChild(parseAssignmentStatement());
+        } else {
+            node.addChild(parseProcedureOrFunctionCall());
+        }
+    } else if (check(BEGINSY)) {
+        node.addChild(parseCompoundStatement());
+    } else if (check(IFSY)) {
+        node.addChild(parseIfStatement());
+    } else if (check(CASESY)) {
+        node.addChild(parseCaseStatement());
+    } else if (check(WHILESY)) {
+        node.addChild(parseWhileStatement());
+    } else if (check(REPEATSY)) {
+        node.addChild(parseRepeatStatement());
+    } else if (check(FORSY)) {
+        node.addChild(parseForStatement());
+    } else {
+        syntaxError("expected statement");
+    }
+
+    return node;
+}
 
 ParseNode Parser::parseAssignmentStatement() {
-    notImplemented("<assignment-statement>");
+    ParseNode node("<assignment-statement>");
+
+    node.addChild(consume(IDENT));
+    node.addChild(consume(BECOMES));
+    node.addChild(parseExpression());
+
+    return node;
 }
 
 ParseNode Parser::parseIfStatement() {
@@ -600,10 +660,35 @@ ParseNode Parser::parseForStatement() {
 }
 
 ParseNode Parser::parseProcedureOrFunctionCall() {
-    notImplemented("<procedure/function-call>");
+    ParseNode node("<procedure/function-call>");
+
+    node.addChild(consume(IDENT));
+
+    if (check(LPARENT)) {
+        node.addChild(consume(LPARENT));
+
+        if (!check(RPARENT)) {
+            node.addChild(parseParameterList());
+        }
+
+        node.addChild(consume(RPARENT));
+    }
+
+    return node;
 }
 
-ParseNode Parser::parseParameterList() { notImplemented("<parameter-list>"); }
+ParseNode Parser::parseParameterList() {
+    ParseNode node("<parameter-list>");
+
+    node.addChild(parseExpression());
+
+    while (check(COMMA)) {
+        node.addChild(consume(COMMA));
+        node.addChild(parseExpression());
+    }
+
+    return node;
+}
 
 ParseNode Parser::parseExpression() { notImplemented("<expression>"); }
 

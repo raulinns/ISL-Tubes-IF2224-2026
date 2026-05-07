@@ -1,0 +1,15 @@
+program TestSubprogram;
+var
+  hasil: integer;
+procedure sapa(n: integer);
+begin
+  writeln(n)
+end;
+function tambah(a, b: integer): integer;
+begin
+  tambah := a + b
+end;
+begin
+  sapa(1);
+  hasil := tambah(3, 4)
+end.

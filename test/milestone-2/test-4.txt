@@ -1,0 +1,14 @@
+program TestDeklarasi;
+const
+  MAX == 100;
+type
+  Titik == record
+    x: integer;
+    y: integer
+  end;
+var
+  p: Titik;
+begin
+  p.x := 10;
+  p.y := 20
+end.

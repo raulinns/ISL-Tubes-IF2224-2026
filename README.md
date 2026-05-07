@@ -1,19 +1,25 @@
-# Arion Interpreter — Milestone 1: Lexical Analysis
+# Arion Compiler — Milestone 2: Syntax Analysis
 
 IF2224 Teori Bahasa Formal dan Automata | [ISL] TBFO
 ![](Cover.jpg)
 
 ## Deskripsi Program
 
-Program saat ini sedang dalam proses Milestone 1, di mana kami membuat **lexical analyzer (lexer)** untuk bahasa pemrograman **Arion**, diimplementasikan dalam C++17 menggunakan **Deterministic Finite Automata (DFA)**. Lexer membaca source code Arion karakter per karakter dan menghasilkan daftar token yang akan digunakan pada tahap selanjutnya (parsing).
+Program ini merupakan implementasi **Milestone 2 (Syntax Analysis / Parser)** dari compiler untuk bahasa pemrograman **Arion**. Parser dibangun menggunakan algoritma **Recursive Descent** yang membaca daftar token hasil dari lexer (Milestone 1) dan membangun **Parse Tree** yang merepresentasikan struktur hierarkis program sesuai grammar bahasa Arion.
 
-Lexer mengenali 52 jenis token meliputi:
+Fitur utama program:
 
-- Konstanta literal (integer, real, char, string)
-- Identifier dan keywords (kontrol alur, deklarasi)
-- Operator (aritmatika, logika, relasional)
-- Tanda baca dan simbol struktur
-- Komentar (`{ }` dan `(* *)`)
+- **Lexical Analysis (Milestone 1)**: Membaca source code Arion dan menghasilkan daftar token menggunakan DFA
+- **Syntax Analysis (Milestone 2)**: Menganalisis urutan token dan membangun Parse Tree menggunakan Recursive Descent
+- **Error Handling**: Mendeteksi dan melaporkan kesalahan leksikal maupun sintaksis dengan pesan informatif
+- **Output Parse Tree**: Menampilkan Parse Tree ke terminal atau menyimpannya ke file `.txt`
+
+Grammar yang didukung mencakup:
+- Deklarasi (`const`, `type`, `var`, `procedure`, `function`)
+- Tipe data (identifier, array, range, enumerated, record)
+- Statement kontrol (`if-then-else`, `case`, `while`, `repeat-until`, `for`)
+- Ekspresi (aritmatika, relasional, logika)
+- Pemanggilan prosedur/fungsi
 
 ## Requirements
 
@@ -42,7 +48,8 @@ make
 ### Contoh
 
 ```bash
-./lexer test/milestone-1/input-1.txt test/milestone-1/output-1.txt
+# Milestone 2 — Syntax Analysis
+./lexer test/milestone-2/test-1.txt test/milestone-2/output-1.txt
 ```
 
 ### Clean
@@ -56,22 +63,27 @@ make clean
 ```
 .
 ├── src/
-│   ├── main.cpp        # Entry point program
-│   ├── lexer.h         # Deklarasi class Lexer
-│   ├── lexer.cpp       # Implementasi Lexer (DFA)
-│   └── token.h         # Definisi TokenType, Token, helper functions
-├── doc/                # Laporan
+│   ├── main.cpp           # Entry point program (lexer + parser)
+│   ├── lexer.h            # Deklarasi class Lexer
+│   ├── lexer.cpp          # Implementasi Lexer (DFA)
+│   ├── token.h            # Definisi TokenType, Token, helper functions
+│   ├── parser.h           # Deklarasi class Parser (Recursive Descent)
+│   ├── parser.cpp         # Implementasi Parser
+│   ├── parse_tree.h       # Definisi struct ParseNode
+│   └── parse_tree.cpp     # Implementasi render Parse Tree
+├── doc/                   # Laporan
 ├── test/
-│   └── milestone-1/    # Input dan output pengujian milestone 1
+│   ├── milestone-1/       # Input dan output pengujian milestone 1
+│   └── milestone-2/       # Input dan output pengujian milestone 2
 ├── Makefile
 └── README.md
 ```
 
 ## Pembagian Tugas
 
-| Nama                       | NIM      | Kontribusi                                          |
-| -------------------------- | -------- | --------------------------------------------------- |
-| Narendra Dharma Wistara M. | 13524044 | Infrastructure DFA, literal, identifier, arithmetic |
-| Arghawisesa Dwinanda Arham | 13524100 | Keywords kontrol, komentar, error handling          |
-| Nashiruddin Akram          | 13524090 | Tanda baca, simbol struktur, logical operator       |
-| Steven Tan                 | 13524060 | Declaration keywords, relational operator           |
+| Nama                       | NIM      | Kontribusi                                                        |
+| -------------------------- | -------- | ----------------------------------------------------------------- |
+| Narendra Dharma Wistara M. | 13524044 | Program, deklarasi (const, type, var), tipe data (array, range, enumerated, record) |
+| Arghawisesa Dwinanda Arham | 13524100 | Subprogram (procedure, function), statement kontrol (if, case, while, repeat, for) |
+| Nashiruddin Akram          | 13524090 | Statement dasar & compound (compound-statement, statement-list, assignment, procedure/function-call) |
+| Steven Tan                 | 13524060 | Ekspresi (expression, simple-expression, term, factor, operator relasional/aditif/multiplikatif) |

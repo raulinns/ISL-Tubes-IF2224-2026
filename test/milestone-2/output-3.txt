@@ -1,0 +1,126 @@
+<program>
+|-- <program-header>
+|   |-- programsy
+|   |-- ident(TestSubprogram)
+|   \-- semicolon
+|-- <declaration-part>
+|   |-- <var-declaration>
+|   |   |-- varsy
+|   |   |-- <identifier-list>
+|   |   |   \-- ident(hasil)
+|   |   |-- colon
+|   |   |-- <type>
+|   |   |   \-- ident(integer)
+|   |   \-- semicolon
+|   |-- <subprogram-declaration>
+|   |   \-- <procedure-declaration>
+|   |       |-- proceduresy
+|   |       |-- ident(sapa)
+|   |       |-- <formal-parameter-list>
+|   |       |   |-- lparent
+|   |       |   |-- <parameter-group>
+|   |       |   |   |-- <identifier-list>
+|   |       |   |   |   \-- ident(n)
+|   |       |   |   |-- colon
+|   |       |   |   \-- ident(integer)
+|   |       |   \-- rparent
+|   |       |-- semicolon
+|   |       |-- <block>
+|   |       |   |-- <declaration-part>
+|   |       |   \-- <compound-statement>
+|   |       |       |-- beginsy
+|   |       |       |-- <statement-list>
+|   |       |       |   \-- <statement>
+|   |       |       |       \-- <procedure/function-call>
+|   |       |       |           |-- ident(writeln)
+|   |       |       |           |-- lparent
+|   |       |       |           |-- <parameter-list>
+|   |       |       |           |   \-- <expression>
+|   |       |       |           |       \-- <simple-expression>
+|   |       |       |           |           \-- <term>
+|   |       |       |           |               \-- <factor>
+|   |       |       |           |                   \-- ident(n)
+|   |       |       |           \-- rparent
+|   |       |       \-- endsy
+|   |       \-- semicolon
+|   \-- <subprogram-declaration>
+|       \-- <function-declaration>
+|           |-- functionsy
+|           |-- ident(tambah)
+|           |-- <formal-parameter-list>
+|           |   |-- lparent
+|           |   |-- <parameter-group>
+|           |   |   |-- <identifier-list>
+|           |   |   |   |-- ident(a)
+|           |   |   |   |-- comma
+|           |   |   |   \-- ident(b)
+|           |   |   |-- colon
+|           |   |   \-- ident(integer)
+|           |   \-- rparent
+|           |-- colon
+|           |-- ident(integer)
+|           |-- semicolon
+|           |-- <block>
+|           |   |-- <declaration-part>
+|           |   \-- <compound-statement>
+|           |       |-- beginsy
+|           |       |-- <statement-list>
+|           |       |   \-- <statement>
+|           |       |       \-- <assignment-statement>
+|           |       |           |-- <variable>
+|           |       |           |   \-- ident(tambah)
+|           |       |           |-- becomes
+|           |       |           \-- <expression>
+|           |       |               \-- <simple-expression>
+|           |       |                   |-- <term>
+|           |       |                   |   \-- <factor>
+|           |       |                   |       \-- ident(a)
+|           |       |                   |-- <additive-operator>
+|           |       |                   |   \-- plus
+|           |       |                   \-- <term>
+|           |       |                       \-- <factor>
+|           |       |                           \-- ident(b)
+|           |       \-- endsy
+|           \-- semicolon
+|-- <compound-statement>
+|   |-- beginsy
+|   |-- <statement-list>
+|   |   |-- <statement>
+|   |   |   \-- <procedure/function-call>
+|   |   |       |-- ident(sapa)
+|   |   |       |-- lparent
+|   |   |       |-- <parameter-list>
+|   |   |       |   \-- <expression>
+|   |   |       |       \-- <simple-expression>
+|   |   |       |           \-- <term>
+|   |   |       |               \-- <factor>
+|   |   |       |                   \-- intcon(1)
+|   |   |       \-- rparent
+|   |   |-- semicolon
+|   |   \-- <statement>
+|   |       \-- <assignment-statement>
+|   |           |-- <variable>
+|   |           |   \-- ident(hasil)
+|   |           |-- becomes
+|   |           \-- <expression>
+|   |               \-- <simple-expression>
+|   |                   \-- <term>
+|   |                       \-- <factor>
+|   |                           \-- <procedure/function-call>
+|   |                               |-- ident(tambah)
+|   |                               |-- lparent
+|   |                               |-- <parameter-list>
+|   |                               |   |-- <expression>
+|   |                               |   |   \-- <simple-expression>
+|   |                               |   |       \-- <term>
+|   |                               |   |           \-- <factor>
+|   |                               |   |               \-- intcon(3)
+|   |                               |   |-- comma
+|   |                               |   \-- <expression>
+|   |                               |       \-- <simple-expression>
+|   |                               |           \-- <term>
+|   |                               |               \-- <factor>
+|   |                               |                   \-- intcon(4)
+|   |                               \-- rparent
+|   \-- endsy
+\-- period

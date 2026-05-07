@@ -146,8 +146,12 @@ ParseNode Parser::parseProgramHeader() {
 ParseNode Parser::parseDeclarationPart() {
     ParseNode node("<declaration-part>");
 
-    if (check(CONSTSY)) {
+    while (check(CONSTSY)) {
         node.addChild(parseConstDeclaration());
+    }
+
+    while (check(TYPESY)) {
+        node.addChild(parseTypeDeclaration());
     }
 
     if (check(CONSTSY)) {
@@ -155,20 +159,11 @@ ParseNode Parser::parseDeclarationPart() {
                     "type, var, and subprogram declarations");
     }
 
-    if (check(TYPESY)) {
-        node.addChild(parseTypeDeclaration());
-    }
-
-    if (check(CONSTSY) || check(TYPESY)) {
-        syntaxError("declarations must be ordered as const, type, var, then "
-                    "subprogram");
-    }
-
-    if (check(VARSY)) {
+    while (check(VARSY)) {
         node.addChild(parseVarDeclaration());
     }
 
-    if (check(CONSTSY) || check(TYPESY) || check(VARSY)) {
+    if (check(CONSTSY) || check(TYPESY)) {
         syntaxError("declarations must be ordered as const, type, var, then "
                     "subprogram");
     }
@@ -438,10 +433,10 @@ ParseNode Parser::parseFunctionDeclaration() {
 ParseNode Parser::parseBlock() {
     ParseNode node("<block>");
 
-    // declaration-part (punya endra tar)
+    // declaration-part
     node.addChild(parseDeclarationPart());
 
-    // compound-statement (punya akram tar)
+    // compound-statement
     node.addChild(parseCompoundStatement());
 
     return node;
@@ -479,7 +474,7 @@ ParseNode Parser::parseParameterGroup() {
 
     // tipe: ident atau array-type
     if (check(ARRAYSY)) {
-        // array-type (punya endra tar)
+        // array-type
         node.addChild(parseArrayType());
     } else {
         // ident (nama tipe sederhana)
@@ -632,13 +627,13 @@ ParseNode Parser::parseIfStatement() {
     // ifsy
     node.addChild(consume(IFSY));
 
-    // expression (punya steven tar)
+    // expression
     node.addChild(parseExpression());
 
     // thensy
     node.addChild(consume(THENSY));
 
-    // statement (punya akram tar)
+    // statement
     node.addChild(parseStatement());
 
     // (elsesy + statement)?
@@ -656,7 +651,7 @@ ParseNode Parser::parseCaseStatement() {
     // casesy
     node.addChild(consume(CASESY));
 
-    // expression (punya steven tar)
+    // expression
     node.addChild(parseExpression());
 
     // ofsy
@@ -686,7 +681,7 @@ ParseNode Parser::parseCaseBlock() {
     // colon
     node.addChild(consume(COLON));
 
-    // statement (punya akram tar)
+    // statement
     node.addChild(parseStatement());
 
     // (semicolon + case-block?)*
@@ -709,14 +704,17 @@ ParseNode Parser::parseWhileStatement() {
     // whilesy
     node.addChild(consume(WHILESY));
 
-    // expression (punya steven tar)
+    // expression
     node.addChild(parseExpression());
 
     // dosy
     node.addChild(consume(DOSY));
 
-    // statement (punya akram tar)
-    node.addChild(parseStatement());
+    // compound-statement
+    node.addChild(parseCompoundStatement());
+
+    // semicolon
+    node.addChild(consume(SEMICOLON));
 
     return node;
 }
@@ -727,13 +725,13 @@ ParseNode Parser::parseRepeatStatement() {
     // repeatsy
     node.addChild(consume(REPEATSY));
 
-    // statement-list (punya akram tar)
+    // statement-list
     node.addChild(parseStatementList(UNTILSY));
 
     // untilsy
     node.addChild(consume(UNTILSY));
 
-    // expression (punya steven tar)
+    // expression
     node.addChild(parseExpression());
 
     return node;
@@ -751,7 +749,7 @@ ParseNode Parser::parseForStatement() {
     // becomes (:=)
     node.addChild(consume(BECOMES));
 
-    // expression, nilai awal (punya steven tar)
+    // expression, nilai awal
     node.addChild(parseExpression());
 
     // tosy atau downtosy
@@ -763,14 +761,14 @@ ParseNode Parser::parseForStatement() {
         syntaxError("expected 'to' or 'downto' in for statement");
     }
 
-    // expression, nilai akhir (punya steven tar)
+    // expression, nilai akhir
     node.addChild(parseExpression());
 
     // dosy
     node.addChild(consume(DOSY));
 
-    // statement (punya akram tar)
-    node.addChild(parseStatement());
+    // statement
+    node.addChild(parseCompoundStatement());
 
     return node;
 }

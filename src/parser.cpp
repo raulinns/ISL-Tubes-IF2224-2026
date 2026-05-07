@@ -713,8 +713,6 @@ ParseNode Parser::parseWhileStatement() {
     // compound-statement
     node.addChild(parseCompoundStatement());
 
-    // semicolon
-    node.addChild(consume(SEMICOLON));
 
     return node;
 }

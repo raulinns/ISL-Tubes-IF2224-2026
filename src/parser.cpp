@@ -690,24 +690,146 @@ ParseNode Parser::parseParameterList() {
     return node;
 }
 
-ParseNode Parser::parseExpression() { notImplemented("<expression>"); }
+ParseNode Parser::parseExpression() {
+    ParseNode node("<expression>");
 
-ParseNode Parser::parseSimpleExpression() {
-    notImplemented("<simple-expression>");
+    node.addChild(parseSimpleExpression());
+
+    if (check(EQL) || check(NEQ) || check(GTR) || check(GEQ) || check(LSS) ||
+        check(LEQ)) {
+        node.addChild(parseRelationalOperator());
+        node.addChild(parseSimpleExpression());
+    }
+
+    return node;
 }
 
-ParseNode Parser::parseTerm() { notImplemented("<term>"); }
+ParseNode Parser::parseSimpleExpression() {
+    ParseNode node("<simple-expression>");
 
-ParseNode Parser::parseFactor() { notImplemented("<factor>"); }
+    if (check(PLUS) || check(MINUS)) {
+        node.addChild(consume(current().type));
+    }
+
+    node.addChild(parseTerm());
+
+    while (check(PLUS) || check(MINUS) || check(ORSY)) {
+        node.addChild(parseAdditiveOperator());
+        node.addChild(parseTerm());
+    }
+
+    return node;
+}
+
+ParseNode Parser::parseTerm() {
+    ParseNode node("<term>");
+
+    node.addChild(parseFactor());
+
+    while (check(TIMES) || check(IDIV) || check(RDIV) || check(IMOD) ||
+           check(ANDSY)) {
+        node.addChild(parseMultiplicativeOperator());
+        node.addChild(parseFactor());
+    }
+
+    return node;
+}
+
+ParseNode Parser::parseFactor() {
+    ParseNode node("<factor>");
+
+    if (check(INTCON) || check(REALCON) || check(CHARCON) || check(STRING)) {
+        node.addChild(consume(current().type));
+    } else if (check(LPARENT)) {
+        node.addChild(consume(LPARENT));
+        node.addChild(parseExpression());
+        node.addChild(consume(RPARENT));
+    } else if (check(NOTSY)) {
+        node.addChild(consume(NOTSY));
+        node.addChild(parseFactor());
+    } else if (check(IDENT) && peek(1).type == LPARENT) {
+        node.addChild(parseProcedureOrFunctionCall());
+    } else if (check(IDENT) &&
+               (peek(1).type == LBRACK || peek(1).type == PERIOD)) {
+        ParseNode variable("<variable>");
+        variable.addChild(consume(IDENT));
+
+        while (check(LBRACK) || check(PERIOD)) {
+            ParseNode component("<component-variable>");
+
+            if (check(LBRACK)) {
+                component.addChild(consume(LBRACK));
+
+                ParseNode indexList("<index-list>");
+                if (check(INTCON) || check(CHARCON) || check(IDENT)) {
+                    indexList.addChild(consume(current().type));
+                } else {
+                    syntaxError("expected index");
+                }
+
+                while (check(COMMA)) {
+                    indexList.addChild(consume(COMMA));
+                    if (check(INTCON) || check(CHARCON) || check(IDENT)) {
+                        indexList.addChild(consume(current().type));
+                    } else {
+                        syntaxError("expected index");
+                    }
+                }
+
+                component.addChild(indexList);
+                component.addChild(consume(RBRACK));
+            } else {
+                component.addChild(consume(PERIOD));
+                component.addChild(consume(IDENT));
+            }
+
+            variable.addChild(component);
+        }
+
+        node.addChild(variable);
+    } else if (check(IDENT)) {
+        node.addChild(consume(IDENT));
+    } else {
+        syntaxError("expected factor");
+    }
+
+    return node;
+}
 
 ParseNode Parser::parseRelationalOperator() {
-    notImplemented("<relational-operator>");
+    ParseNode node("<relational-operator>");
+
+    if (check(EQL) || check(NEQ) || check(GTR) || check(GEQ) || check(LSS) ||
+        check(LEQ)) {
+        node.addChild(consume(current().type));
+    } else {
+        syntaxError("expected relational operator");
+    }
+
+    return node;
 }
 
 ParseNode Parser::parseAdditiveOperator() {
-    notImplemented("<additive-operator>");
+    ParseNode node("<additive-operator>");
+
+    if (check(PLUS) || check(MINUS) || check(ORSY)) {
+        node.addChild(consume(current().type));
+    } else {
+        syntaxError("expected additive operator");
+    }
+
+    return node;
 }
 
 ParseNode Parser::parseMultiplicativeOperator() {
-    notImplemented("<multiplicative-operator>");
+    ParseNode node("<multiplicative-operator>");
+
+    if (check(TIMES) || check(IDIV) || check(RDIV) || check(IMOD) ||
+        check(ANDSY)) {
+        node.addChild(consume(current().type));
+    } else {
+        syntaxError("expected multiplicative operator");
+    }
+
+    return node;
 }

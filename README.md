@@ -39,17 +39,17 @@ make
 
 ```bash
 # Output ke terminal
-./lexer <input.txt>
+./arion <input.txt>
 
 # Output ke file
-./lexer <input.txt> <output.txt>
+./arion <input.txt> <output.txt>
 ```
 
 ### Contoh
 
 ```bash
 # Milestone 2 — Syntax Analysis
-./lexer test/milestone-2/test-1.txt test/milestone-2/output-1.txt
+./arion test/milestone-2/test-1.txt test/milestone-2/output-1.txt
 ```
 
 ### Clean

@@ -4,8 +4,8 @@ TARGET   := arion
 SRCDIR   := src
 OBJDIR   := build
 
-SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp
-OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o
+SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp
+OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o
 
 all: $(TARGET)
 
@@ -22,6 +22,12 @@ $(OBJDIR)/parser.o: $(SRCDIR)/parser.cpp $(SRCDIR)/parser.h $(SRCDIR)/parse_tree
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/parse_tree.o: $(SRCDIR)/parse_tree.cpp $(SRCDIR)/parse_tree.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/ast.o: $(SRCDIR)/ast.cpp $(SRCDIR)/ast.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/ast_builder.o: $(SRCDIR)/ast_builder.cpp $(SRCDIR)/ast_builder.h $(SRCDIR)/ast.h $(SRCDIR)/parse_tree.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR):

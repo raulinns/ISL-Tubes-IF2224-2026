@@ -11,7 +11,7 @@ enum TokenType {
     STRING,  // No.4  : Sekuens karakter            contoh: 'IRK', 'TBFO'
 
     // Identifier
-    IDENT, // No.37 : x, PI, MyInt, h4g, ...
+    IDENT, // No.37 : x, PI, MyInt, ...
 
     // Logical Operator
     NOTSY, // No.5  : NOT

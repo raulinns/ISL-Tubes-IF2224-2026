@@ -15,6 +15,10 @@ ParseNode makeTokenNode(const Token &token) {
     return ParseNode(label);
 }
 
+bool statementConsumesTrailingSemicolon(TokenType type) {
+    return type == WHILESY || type == FORSY;
+}
+
 } // namespace
 
 Parser::Parser(std::vector<Token> tokens) : pos_(0) {
@@ -497,20 +501,19 @@ ParseNode Parser::parseCompoundStatement() {
 ParseNode Parser::parseStatementList(TokenType terminator) {
     ParseNode node("<statement-list>");
 
-    if (check(terminator)) {
-        return node;
-    }
+    while (!check(terminator)) {
+        const TokenType startType = current().type;
+        node.addChild(parseStatement());
 
-    node.addChild(parseStatement());
+        if (statementConsumesTrailingSemicolon(startType)) {
+            continue;
+        }
 
-    while (check(SEMICOLON)) {
-        node.addChild(consume(SEMICOLON));
-
-        if (check(terminator)) {
+        if (!check(SEMICOLON)) {
             break;
         }
 
-        node.addChild(parseStatement());
+        node.addChild(consume(SEMICOLON));
     }
 
     return node;
@@ -713,6 +716,8 @@ ParseNode Parser::parseWhileStatement() {
     // compound-statement
     node.addChild(parseCompoundStatement());
 
+    // semicolon
+    node.addChild(consume(SEMICOLON));
 
     return node;
 }
@@ -765,8 +770,11 @@ ParseNode Parser::parseForStatement() {
     // dosy
     node.addChild(consume(DOSY));
 
-    // statement
+    // compound-statement
     node.addChild(parseCompoundStatement());
+
+    // semicolon
+    node.addChild(consume(SEMICOLON));
 
     return node;
 }

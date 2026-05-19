@@ -139,7 +139,7 @@ Token Lexer::readIdentOrKeyword() {
     std::string word;
     int startLine = line_;
 
-    while (!isEOF() && std::isalnum(static_cast<unsigned char>(current_))) {
+    while (!isEOF() && std::isalpha(static_cast<unsigned char>(current_))) {
         word += current_;
         nextChar();
     }
@@ -183,11 +183,6 @@ Token Lexer::readNumber() {
             nextChar();
             return readUnknownSequence(numStr);
         }
-    }
-
-    if (!isEOF() && !isSeparator(current_) &&
-        std::isalnum(static_cast<unsigned char>(current_))) {
-        return readUnknownSequence(numStr);
     }
 
     return Token(isReal ? REALCON : INTCON, numStr, startLine);

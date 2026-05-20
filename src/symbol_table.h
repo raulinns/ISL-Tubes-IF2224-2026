@@ -85,6 +85,8 @@ class SymbolTable {
 
     int lookup(const std::string &name) const;
     int lookupCurrentScope(const std::string &name) const;
+    void markInitialized(int tabIndex);
+    void setReference(int tabIndex, int ref);
 
     int insertArray(TypeKind indexType, TypeKind elementType, int elementRef,
                     int low, int high, int elementSize);

@@ -183,6 +183,20 @@ int SymbolTable::lookupCurrentScope(const std::string &name) const {
     return -1;
 }
 
+void SymbolTable::markInitialized(int tabIndex) {
+    if (tabIndex < 0 || tabIndex >= static_cast<int>(tab_.size())) {
+        throw std::out_of_range("tab index out of range");
+    }
+    tab_[tabIndex].initialized = true;
+}
+
+void SymbolTable::setReference(int tabIndex, int ref) {
+    if (tabIndex < 0 || tabIndex >= static_cast<int>(tab_.size())) {
+        throw std::out_of_range("tab index out of range");
+    }
+    tab_[tabIndex].ref = ref;
+}
+
 int SymbolTable::insertArray(TypeKind indexType, TypeKind elementType,
                              int elementRef, int low, int high,
                              int elementSize) {

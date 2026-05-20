@@ -4,8 +4,8 @@ TARGET   := arion
 SRCDIR   := src
 OBJDIR   := build
 
-SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp $(SRCDIR)/symbol_table.cpp
-OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o $(OBJDIR)/symbol_table.o
+SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp $(SRCDIR)/symbol_table.cpp $(SRCDIR)/semantic_analyzer.cpp
+OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o $(OBJDIR)/symbol_table.o $(OBJDIR)/semantic_analyzer.o
 
 all: $(TARGET)
 
@@ -31,6 +31,9 @@ $(OBJDIR)/ast_builder.o: $(SRCDIR)/ast_builder.cpp $(SRCDIR)/ast_builder.h $(SRC
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/symbol_table.o: $(SRCDIR)/symbol_table.cpp $(SRCDIR)/symbol_table.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/semantic_analyzer.o: $(SRCDIR)/semantic_analyzer.cpp $(SRCDIR)/semantic_analyzer.h $(SRCDIR)/ast.h $(SRCDIR)/symbol_table.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR):

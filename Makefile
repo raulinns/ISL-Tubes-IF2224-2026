@@ -12,7 +12,7 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-$(OBJDIR)/main.o: $(SRCDIR)/main.cpp $(SRCDIR)/lexer.h $(SRCDIR)/token.h | $(OBJDIR)
+$(OBJDIR)/main.o: $(SRCDIR)/main.cpp $(SRCDIR)/lexer.h $(SRCDIR)/token.h $(SRCDIR)/parser.h $(SRCDIR)/parse_tree.h $(SRCDIR)/ast.h $(SRCDIR)/ast_builder.h $(SRCDIR)/semantic_analyzer.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/lexer.o: $(SRCDIR)/lexer.cpp $(SRCDIR)/lexer.h $(SRCDIR)/token.h | $(OBJDIR)

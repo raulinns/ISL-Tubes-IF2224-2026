@@ -421,11 +421,39 @@ class SemanticAnalyzer {
             visitCase(node);
             break;
         case AstKind::Call:
-            evalCall(node);
+            evalCall(node, true);
+            break;
+        case AstKind::Identifier:
+            visitBareIdentifierStatement(node);
             break;
         default:
             evalExpression(node);
             break;
+        }
+    }
+
+    void visitBareIdentifierStatement(AstNode &node) {
+        TypeInfo none;
+        const int index = symbols_.lookup(node.text);
+        if (index < 0) {
+            error("Identifier is not a valid statement/callable: " + node.text);
+            annotate(node, none);
+            return;
+        }
+
+        const TabEntry &entry = symbols_.tabEntry(index);
+        TypeInfo type = typeFromEntry(entry);
+        annotate(node, type, index);
+
+        if (entry.obj != ObjectKind::Procedure && entry.obj != ObjectKind::Function) {
+            error("Identifier is not a valid statement/callable: " + node.text);
+            return;
+        }
+
+        const std::string normalized = SymbolTable::normalizeIdentifier(node.text);
+        if (normalized != "readln" && normalized != "writeln" && entry.ref > 0) {
+            std::vector<ExprInfo> args;
+            checkCallArguments(entry, args);
         }
     }
 
@@ -547,7 +575,7 @@ class SemanticAnalyzer {
         case AstKind::BinaryExpr:
             return evalBinary(node);
         case AstKind::Call:
-            return evalCall(node);
+            return evalCall(node, false);
         default:
             annotate(node, TypeInfo{});
             return {};
@@ -606,13 +634,23 @@ class SemanticAnalyzer {
         if (entry.obj == ObjectKind::Constant) {
             parseConstantEntryValue(entry, info);
         }
+        if (!asLValue && entry.obj == ObjectKind::Procedure) {
+            error("Procedure has no return value: " + node.text);
+        }
+        if (!asLValue && entry.obj == ObjectKind::Function && entry.ref > 0) {
+            std::vector<ExprInfo> args;
+            checkCallArguments(entry, args);
+        }
         if (!asLValue && entry.obj == ObjectKind::Variable && !entry.initialized) {
             warning("Variable may be used before initialization: " + node.text);
         }
-        if (asLValue && entry.obj == ObjectKind::Constant) {
-            error("Cannot assign to constant: " + node.text);
+        if (asLValue && entry.obj != ObjectKind::Variable &&
+            entry.obj != ObjectKind::Parameter && entry.obj != ObjectKind::Field) {
+            error("Identifier is not assignable: " + node.text);
         }
-        if (entry.obj == ObjectKind::Type || entry.obj == ObjectKind::Reserved) {
+        if (!asLValue &&
+            (entry.obj == ObjectKind::Program || entry.obj == ObjectKind::Type ||
+             entry.obj == ObjectKind::Reserved)) {
             error("Identifier is not a value: " + node.text);
         }
 
@@ -629,7 +667,6 @@ class SemanticAnalyzer {
                 current = evalIndexAccess(component, current);
             } else if (component.kind == AstKind::FieldAccess) {
                 current = evalFieldAccess(component, current);
-                info.symbolIndex = component.symbolIndex;
             }
         }
 
@@ -756,7 +793,7 @@ class SemanticAnalyzer {
         return result;
     }
 
-    ExprInfo evalCall(AstNode &node) {
+    ExprInfo evalCall(AstNode &node, bool asStatement) {
         ExprInfo result;
         const int index = symbols_.lookup(node.text);
         if (index < 0) {
@@ -769,8 +806,13 @@ class SemanticAnalyzer {
         }
 
         const TabEntry &entry = symbols_.tabEntry(index);
-        if (entry.obj != ObjectKind::Procedure && entry.obj != ObjectKind::Function) {
+        const bool isCallable =
+            entry.obj == ObjectKind::Procedure || entry.obj == ObjectKind::Function;
+        if (!isCallable) {
             error("Identifier is not callable: " + node.text);
+        }
+        if (!asStatement && entry.obj == ObjectKind::Procedure) {
+            error("Procedure has no return value: " + node.text);
         }
 
         std::vector<ExprInfo> args;
@@ -779,7 +821,8 @@ class SemanticAnalyzer {
         }
 
         const std::string normalized = SymbolTable::normalizeIdentifier(node.text);
-        if (normalized != "readln" && normalized != "writeln" && entry.ref > 0) {
+        if (isCallable && normalized != "readln" && normalized != "writeln" &&
+            entry.ref > 0) {
             checkCallArguments(entry, args);
         }
 

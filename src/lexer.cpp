@@ -139,7 +139,7 @@ Token Lexer::readIdentOrKeyword() {
     std::string word;
     int startLine = line_;
 
-    while (!isEOF() && std::isalpha(static_cast<unsigned char>(current_))) {
+    while (!isEOF() && std::isalnum(static_cast<unsigned char>(current_))) {
         word += current_;
         nextChar();
     }

@@ -7,6 +7,7 @@
 #include "token.h"
 
 #include <cstdlib>
+#include <cctype>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -66,6 +67,31 @@ static std::string formatSemanticDiagnostics(const std::vector<SemanticDiagnosti
     return out.str();
 }
 
+static std::string readWholeFile(const std::string &path) {
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        throw std::runtime_error("Tidak dapat membuka file: " + path);
+    }
+
+    std::ostringstream buffer;
+    buffer << in.rdbuf();
+    return buffer.str();
+}
+
+static std::string ltrimCopy(std::string text) {
+    std::size_t pos = 0;
+    while (pos < text.size() &&
+           std::isspace(static_cast<unsigned char>(text[pos]))) {
+        ++pos;
+    }
+    return text.substr(pos);
+}
+
+static bool looksLikeParseTreeInput(const std::string &text) {
+    const std::string trimmed = ltrimCopy(text);
+    return trimmed.rfind("<program>", 0) == 0;
+}
+
 // main
 int main(int argc, char *argv[]) {
     // 1. Validasi argumen
@@ -77,38 +103,36 @@ int main(int argc, char *argv[]) {
     const std::string inputFile = argv[1];
     const std::string outputFile = (argc == 3) ? argv[2] : "";
 
-    // 2. Jalankan Lexer
-    std::vector<Token> tokens;
+    ParseNode parseTreeNode("<empty>");
+    AstNode ast(AstKind::Program);
+    SemanticResult semantic{AstNode(AstKind::Program), SymbolTable(), {}};
 
     try {
-        Lexer lexer(inputFile);
-        tokens = lexer.tokenize();
+        const std::string inputText = readWholeFile(inputFile);
+        if (looksLikeParseTreeInput(inputText)) {
+            parseTreeNode = parseRenderedParseTree(inputText);
+        } else {
+            // 2. Jalankan Lexer
+            Lexer lexer(inputFile);
+            std::vector<Token> tokens = lexer.tokenize();
+
+            // 3. Laporkan error leksikal (jika ada) ke stderr
+            reportErrors(tokens);
+
+            if (hasLexicalError(tokens)) {
+                std::cerr << "[ERROR] Parsing dibatalkan karena masih ada token "
+                             "leksikal tidak valid.\n";
+                return EXIT_FAILURE;
+            }
+
+            Parser parser(tokens);
+            parseTreeNode = parser.parseProgram();
+        }
     } catch (const std::runtime_error &e) {
         std::cerr << "[ERROR] " << e.what() << "\n";
         return EXIT_FAILURE;
     } catch (const std::exception &e) {
         std::cerr << "[ERROR] Exception tidak terduga: " << e.what() << "\n";
-        return EXIT_FAILURE;
-    }
-
-    // 3. Laporkan error leksikal (jika ada) ke stderr
-    reportErrors(tokens);
-
-    if (hasLexicalError(tokens)) {
-        std::cerr << "[ERROR] Parsing dibatalkan karena masih ada token "
-                     "leksikal tidak valid.\n";
-        return EXIT_FAILURE;
-    }
-
-    ParseNode parseTreeNode("<empty>");
-
-    AstNode ast(AstKind::Program);
-    SemanticResult semantic{AstNode(AstKind::Program), SymbolTable(), {}};
-    try {
-        Parser parser(tokens);
-        parseTreeNode = parser.parseProgram();
-    } catch (const std::exception &e) {
-        std::cerr << "[PARSER] " << e.what() << "\n";
         return EXIT_FAILURE;
     }
 

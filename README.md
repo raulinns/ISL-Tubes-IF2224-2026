@@ -1,58 +1,51 @@
-# Arion Compiler — Milestone 2: Syntax Analysis
+# Arion Compiler - Milestone 3: Semantic Analysis
 
 IF2224 Teori Bahasa Formal dan Automata | [ISL] TBFO
-![](Cover.jpg)
+
+![Cover](Cover.jpg)
 
 ## Deskripsi Program
 
-Program ini merupakan implementasi **Milestone 2 (Syntax Analysis / Parser)** dari compiler untuk bahasa pemrograman **Arion**. Parser dibangun menggunakan algoritma **Recursive Descent** yang membaca daftar token hasil dari lexer (Milestone 1) dan membangun **Parse Tree** yang merepresentasikan struktur hierarkis program sesuai grammar bahasa Arion.
+Program ini merupakan implementasi compiler bahasa Arion sampai tahap **Milestone 3 (Semantic Analysis)**. Alur program membaca source code Arion atau parse tree hasil parser, membangun AST, menjalankan semantic visitor, lalu menghasilkan **Decorated AST**, **symbol table**, dan daftar diagnostic semantic.
 
-Fitur utama program:
+Fitur utama:
 
-- **Lexical Analysis (Milestone 1)**: Membaca source code Arion dan menghasilkan daftar token menggunakan DFA
-- **Syntax Analysis (Milestone 2)**: Menganalisis urutan token dan membangun Parse Tree menggunakan Recursive Descent
-- **Error Handling**: Mendeteksi dan melaporkan kesalahan leksikal maupun sintaksis dengan pesan informatif
-- **Output Parse Tree**: Menampilkan Parse Tree ke terminal atau menyimpannya ke file `.txt`
-
-Grammar yang didukung mencakup:
-- Deklarasi (`const`, `type`, `var`, `procedure`, `function`)
-- Tipe data (identifier, array, range, enumerated, record)
-- Statement kontrol (`if-then-else`, `case`, `while`, `repeat-until`, `for`)
-- Ekspresi (aritmatika, relasional, logika)
-- Pemanggilan prosedur/fungsi
+- **Lexical Analysis**: membaca source code Arion dan menghasilkan token berbasis DFA.
+- **Syntax Analysis**: memvalidasi token dengan recursive descent parser dan membangun parse tree.
+- **AST Builder**: mengubah parse tree menjadi AST yang lebih ringkas.
+- **Semantic Analysis**: melakukan pengecekan deklarasi, scope, tipe ekspresi, assignment, kondisi kontrol, array index, record field, parameter call, dan return function.
+- **Symbol Table**: mengelola `tab`, `btab`, dan `atab` beserta operasi `lookup`, `insert`, `pushScope`, dan `popScope`.
+- **Output**: menampilkan decorated AST, symbol table, dan semantic diagnostics.
 
 ## Requirements
 
-- **Compiler**: g++ dengan dukungan C++17
-- **OS**: Linux / macOS (untuk Windows harus menggunakan WSL)
-- **Build tool**: GNU Make
+- Compiler: `g++` dengan dukungan C++17
+- Build tool: GNU Make
+- OS: Linux atau macOS
 
-## Cara Instalasi dan Penggunaan
-
-### Build
+## Cara Build dan Run
 
 ```bash
 make
 ```
 
-### Run
+Menjalankan dari source code Arion:
 
 ```bash
-# Output ke terminal
 ./arion <input.txt>
-
-# Output ke file
 ./arion <input.txt> <output.txt>
 ```
 
-### Contoh
+Program juga dapat menerima parse tree ter-render hasil parser, selama file diawali root `<program>` dengan format tree ASCII yang dihasilkan `renderParseTree`.
+
+Contoh:
 
 ```bash
-# Milestone 2 — Syntax Analysis
-./arion test/milestone-2/test-1.txt test/milestone-2/output-1.txt
+./arion test/input.txt
+./arion test/input.txt output.txt
 ```
 
-### Clean
+Membersihkan build:
 
 ```bash
 make clean
@@ -60,30 +53,29 @@ make clean
 
 ## Struktur Repository
 
-```
+```text
 .
 ├── src/
-│   ├── main.cpp           # Entry point program (lexer + parser)
-│   ├── lexer.h            # Deklarasi class Lexer
-│   ├── lexer.cpp          # Implementasi Lexer (DFA)
-│   ├── token.h            # Definisi TokenType, Token, helper functions
-│   ├── parser.h           # Deklarasi class Parser (Recursive Descent)
-│   ├── parser.cpp         # Implementasi Parser
-│   ├── parse_tree.h       # Definisi struct ParseNode
-│   └── parse_tree.cpp     # Implementasi render Parse Tree
-├── doc/                   # Laporan
+│   ├── main.cpp                 # Entry point dan integrasi lexer-parser-AST-semantic
+│   ├── lexer.h/.cpp             # Lexical analyzer
+│   ├── token.h                  # Definisi token
+│   ├── parser.h/.cpp            # Recursive descent parser
+│   ├── parse_tree.h/.cpp        # Struktur, render, dan pembacaan parse tree
+│   ├── ast.h/.cpp               # Struktur dan render AST
+│   ├── ast_builder.h/.cpp       # Konversi parse tree ke AST
+│   ├── symbol_table.h/.cpp      # tab, btab, atab, scope stack, lookup/insert
+│   └── semantic_analyzer.h/.cpp # Semantic visitor dan type checking
+├── doc/
 ├── test/
-│   ├── milestone-1/       # Input dan output pengujian milestone 1
-│   └── milestone-2/       # Input dan output pengujian milestone 2
 ├── Makefile
 └── README.md
 ```
 
-## Pembagian Tugas
+## Pembagian Tugas Milestone 3
 
-| Nama                       | NIM      | Kontribusi                                                        |
-| -------------------------- | -------- | ----------------------------------------------------------------- |
-| Narendra Dharma Wistara M. | 13524044 | Program, deklarasi (const, type, var), tipe data (array, range, enumerated, record) |
-| Arghawisesa Dwinanda Arham | 13524100 | Subprogram (procedure, function), statement kontrol (if, case, while, repeat, for) |
-| Nashiruddin Akram          | 13524090 | Statement dasar & compound (compound-statement, statement-list, assignment, procedure/function-call) |
-| Steven Tan                 | 13524060 | Ekspresi (expression, simple-expression, term, factor, operator relasional/aditif/multiplikatif) |
+| Nama | Kontribusi |
+| --- | --- |
+| Akram | Membuat AST dari parse tree, termasuk definisi node AST dan converter parse tree ke AST. |
+| Endra | Membuat `tab`, `btab`, `atab`, scope stack, predefined identifier, dan fungsi `lookup`, `insert`, `push`, `pop`. |
+| Argha | Membuat aturan semantic dan type checking, terutama ekspresi, assignment, kondisi `if`/`while`, array index, dan compatibility type. |
+| Steven | Membuat semantic visitor dan integrasi ke `main`, output decorated AST/symbol table, test end-to-end, dan error reporting. |

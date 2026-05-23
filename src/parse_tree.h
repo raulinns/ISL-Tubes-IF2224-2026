@@ -18,5 +18,6 @@ struct ParseNode {
 };
 
 std::string renderParseTree(const ParseNode &root);
+ParseNode parseRenderedParseTree(const std::string &text);
 
 #endif // PARSE_TREE_H

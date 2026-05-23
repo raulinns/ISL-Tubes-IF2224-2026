@@ -200,8 +200,11 @@ void SymbolTable::setReference(int tabIndex, int ref) {
 int SymbolTable::insertArray(TypeKind indexType, TypeKind elementType,
                              int elementRef, int low, int high,
                              int elementSize) {
-    if (indexType == TypeKind::Real) {
-        throw std::runtime_error("Array index type cannot be Real");
+    if (indexType != TypeKind::Integer && indexType != TypeKind::Char &&
+        indexType != TypeKind::Boolean && indexType != TypeKind::Subrange &&
+        indexType != TypeKind::Enum) {
+        throw std::runtime_error(
+            "Array index type must be a simple ordinal type and cannot be Real");
     }
     if (low > high) {
         throw std::runtime_error("Array lower bound cannot exceed upper bound");

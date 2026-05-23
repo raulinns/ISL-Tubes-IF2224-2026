@@ -18,6 +18,8 @@ struct TypeInfo {
     bool hasRange = false;
     int low = 0;
     int high = 0;
+    bool hasStringLength = false;
+    int stringLength = 0;
 };
 
 struct ExprInfo {
@@ -51,8 +53,54 @@ std::string rangeLiteral(const TypeInfo &type) {
     return std::to_string(type.low) + ".." + std::to_string(type.high);
 }
 
+TypeKind typeKindFromString(const std::string &name) {
+    const std::string normalized = lowerCopy(name);
+    if (normalized == "integer") {
+        return TypeKind::Integer;
+    }
+    if (normalized == "real") {
+        return TypeKind::Real;
+    }
+    if (normalized == "char") {
+        return TypeKind::Char;
+    }
+    if (normalized == "boolean") {
+        return TypeKind::Boolean;
+    }
+    if (normalized == "string") {
+        return TypeKind::String;
+    }
+    if (normalized == "array") {
+        return TypeKind::Array;
+    }
+    if (normalized == "record") {
+        return TypeKind::Record;
+    }
+    if (normalized == "subrange") {
+        return TypeKind::Subrange;
+    }
+    if (normalized == "enum") {
+        return TypeKind::Enum;
+    }
+    return TypeKind::None;
+}
+
+std::string typeMetadataLiteral(const TypeInfo &type) {
+    if (type.kind == TypeKind::Enum) {
+        std::string metadata = "base=" + typeKindToString(type.base);
+        if (type.hasRange) {
+            metadata += ";range=" + std::to_string(type.low) + ".." +
+                        std::to_string(type.high);
+        }
+        return metadata;
+    }
+    return rangeLiteral(type);
+}
+
 TypeKind underlying(const TypeInfo &type) {
-    return type.kind == TypeKind::Subrange ? type.base : type.kind;
+    return (type.kind == TypeKind::Subrange || type.kind == TypeKind::Enum)
+               ? type.base
+               : type.kind;
 }
 
 bool isNumeric(TypeKind kind) {
@@ -61,6 +109,12 @@ bool isNumeric(TypeKind kind) {
 }
 
 bool isScalar(TypeKind kind) {
+    return kind == TypeKind::Integer || kind == TypeKind::Boolean ||
+           kind == TypeKind::Char || kind == TypeKind::Subrange ||
+           kind == TypeKind::Enum;
+}
+
+bool isValidArrayIndexType(TypeKind kind) {
     return kind == TypeKind::Integer || kind == TypeKind::Boolean ||
            kind == TypeKind::Char || kind == TypeKind::Subrange ||
            kind == TypeKind::Enum;
@@ -87,7 +141,25 @@ TypeInfo typeFromEntry(const TabEntry &entry) {
         type.base = static_cast<TypeKind>(entry.ref);
         type.hasRange = parseRangeLiteral(entry.literalValue, type.low, type.high);
     } else if (entry.type == TypeKind::Enum) {
-        type.hasRange = parseRangeLiteral(entry.literalValue, type.low, type.high);
+        const std::string basePrefix = "base=";
+        const std::string rangeMarker = ";range=";
+        if (entry.literalValue.rfind(basePrefix, 0) == 0) {
+            const std::size_t rangePos = entry.literalValue.find(rangeMarker);
+            const std::string baseName =
+                rangePos == std::string::npos
+                    ? entry.literalValue.substr(basePrefix.size())
+                    : entry.literalValue.substr(basePrefix.size(),
+                                                rangePos - basePrefix.size());
+            type.base = typeKindFromString(baseName);
+            if (rangePos != std::string::npos) {
+                type.hasRange =
+                    parseRangeLiteral(entry.literalValue.substr(
+                                          rangePos + rangeMarker.size()),
+                                      type.low, type.high);
+            }
+        } else {
+            type.hasRange = parseRangeLiteral(entry.literalValue, type.low, type.high);
+        }
     }
     return type;
 }
@@ -186,14 +258,16 @@ class SemanticAnalyzer {
     void visitTypeDecl(AstNode &node) {
         TypeInfo type = node.children.empty() ? TypeInfo{} : resolveType(node.children[0]);
         const int index =
-            insertSymbol(node.text, ObjectKind::Type, type, true, rangeLiteral(type));
+            insertSymbol(node.text, ObjectKind::Type, type, true,
+                         typeMetadataLiteral(type));
         annotate(node, type, index);
     }
 
     void visitVarDecl(AstNode &node) {
         TypeInfo type = node.children.empty() ? TypeInfo{} : resolveType(node.children[0]);
         const int index =
-            insertSymbol(node.text, ObjectKind::Variable, type, false, rangeLiteral(type));
+            insertSymbol(node.text, ObjectKind::Variable, type, false,
+                         typeMetadataLiteral(type));
         annotate(node, type, index);
     }
 
@@ -240,7 +314,11 @@ class SemanticAnalyzer {
         if (node.children.size() > 3) {
             const int previousFunctionResultIndex = currentFunctionResultIndex_;
             currentFunctionResultIndex_ = outerIndex;
-            visitStatement(node.children[3]);
+            const bool assignsReturnOnAllPaths = visitStatement(node.children[3]);
+            if (outerIndex >= 0 && !assignsReturnOnAllPaths) {
+                error("Function " + node.text +
+                      " may not assign a return value on all control-flow paths");
+            }
             currentFunctionResultIndex_ = previousFunctionResultIndex;
         }
         symbols_.popScope();
@@ -253,7 +331,7 @@ class SemanticAnalyzer {
                 param.children.empty() ? TypeInfo{} : resolveType(param.children[0]);
             const int index =
                 insertSymbol(param.text, ObjectKind::Parameter, type, true,
-                             rangeLiteral(type));
+                             typeMetadataLiteral(type));
             annotate(param, type, index);
         }
     }
@@ -329,23 +407,28 @@ class SemanticAnalyzer {
         TypeInfo elementType =
             node.children.size() > 1 ? resolveType(node.children[1]) : TypeInfo{};
 
-        if (underlying(indexType) == TypeKind::Real) {
-            error("Array index type cannot be Real");
+        const bool validIndexType = isValidArrayIndexType(indexType.kind);
+        if (!validIndexType) {
+            error("Array index type must be a simple ordinal type and cannot be Real");
         }
 
         int ref = 0;
-        try {
-            ref = symbols_.insertArray(underlying(indexType), elementType.kind,
-                                       elementType.ref,
-                                       indexType.hasRange ? indexType.low : 0,
-                                       indexType.hasRange ? indexType.high : 0,
-                                       typeSize(elementType.kind));
-        } catch (const std::exception &e) {
-            error(e.what());
+        bool insertedArray = false;
+        if (validIndexType) {
+            try {
+                ref = symbols_.insertArray(underlying(indexType), elementType.kind,
+                                           elementType.ref,
+                                           indexType.hasRange ? indexType.low : 0,
+                                           indexType.hasRange ? indexType.high : 0,
+                                           typeSize(elementType.kind));
+                insertedArray = true;
+            } catch (const std::exception &e) {
+                error(e.what());
+            }
         }
 
         TypeInfo type;
-        type.kind = TypeKind::Array;
+        type.kind = insertedArray ? TypeKind::Array : TypeKind::None;
         type.ref = ref;
         annotate(node, type);
         return type;
@@ -358,7 +441,7 @@ class SemanticAnalyzer {
                 field.children.empty() ? TypeInfo{} : resolveType(field.children[0]);
             const int fieldIndex = insertSymbol(field.text, ObjectKind::Field,
                                                 fieldType, true,
-                                                rangeLiteral(fieldType));
+                                                typeMetadataLiteral(fieldType));
             annotate(field, fieldType, fieldIndex);
         }
         symbols_.popScope();
@@ -374,63 +457,87 @@ class SemanticAnalyzer {
         TypeInfo type;
         type.kind = TypeKind::Enum;
         type.ref = nextEnumRef_++;
-        type.hasRange = !node.children.empty();
-        type.low = 0;
-        type.high = static_cast<int>(node.children.size()) - 1;
+        bool hasBaseType = false;
+        bool hasValueRange = false;
 
-        int ordinal = 0;
         for (AstNode &ident : node.children) {
-            const int index =
-                insertSymbol(ident.text, ObjectKind::Constant, type, true,
-                             std::to_string(ordinal));
-            annotate(ident, type, index);
-            ++ordinal;
+            ExprInfo value = evalConstant(ident);
+            const int index = value.symbolIndex;
+
+            if (index < 0) {
+                error("Enumerated identifier must be declared before use: " +
+                      ident.text);
+                continue;
+            }
+
+            const TabEntry &entry = symbols_.tabEntry(index);
+            if (entry.obj != ObjectKind::Constant) {
+                error("Enumerated identifier must be a constant: " + ident.text);
+            }
+
+            if (!hasBaseType) {
+                type.base = underlying(value.type);
+                hasBaseType = true;
+            } else if (underlying(value.type) != type.base) {
+                error("Enumerated identifiers must have the same type");
+            }
+
+            if (value.hasIntValue) {
+                if (!hasValueRange) {
+                    type.low = value.intValue;
+                    type.high = value.intValue;
+                    hasValueRange = true;
+                } else {
+                    type.low = std::min(type.low, value.intValue);
+                    type.high = std::max(type.high, value.intValue);
+                }
+            }
         }
 
+        if (!hasBaseType) {
+            type.base = TypeKind::None;
+        }
+        type.hasRange = hasValueRange;
         annotate(node, type);
         return type;
     }
 
-    void visitStatement(AstNode &node) {
+    bool visitStatement(AstNode &node) {
         node.lexicalLevel = symbols_.currentLevel();
         switch (node.kind) {
         case AstKind::CompoundStmt:
-        case AstKind::StatementList:
+        case AstKind::StatementList: {
+            bool assignedOnAllPaths = false;
             for (AstNode &child : node.children) {
-                visitStatement(child);
+                assignedOnAllPaths = visitStatement(child) || assignedOnAllPaths;
             }
             annotate(node, TypeInfo{});
-            break;
+            return assignedOnAllPaths;
+        }
         case AstKind::EmptyStmt:
             annotate(node, TypeInfo{});
-            break;
+            return false;
         case AstKind::AssignStmt:
-            visitAssignment(node);
-            break;
+            return visitAssignment(node);
         case AstKind::IfStmt:
-            visitConditional(node, "if");
-            break;
+            return visitConditional(node, "if");
         case AstKind::WhileStmt:
-            visitLoop(node, "while");
-            break;
+            return visitLoop(node, "while");
         case AstKind::RepeatStmt:
-            visitRepeat(node);
-            break;
+            return visitRepeat(node);
         case AstKind::ForStmt:
-            visitFor(node);
-            break;
+            return visitFor(node);
         case AstKind::CaseStmt:
-            visitCase(node);
-            break;
+            return visitCase(node);
         case AstKind::Call:
             evalCall(node, true);
-            break;
+            return false;
         case AstKind::Identifier:
             visitBareIdentifierStatement(node);
-            break;
+            return false;
         default:
             evalExpression(node);
-            break;
+            return false;
         }
     }
 
@@ -459,7 +566,7 @@ class SemanticAnalyzer {
         }
     }
 
-    void visitAssignment(AstNode &node) {
+    bool visitAssignment(AstNode &node) {
         ExprInfo target =
             node.children.empty() ? ExprInfo{} : evalVariable(node.children[0], true);
         ExprInfo value =
@@ -477,20 +584,24 @@ class SemanticAnalyzer {
             }
         }
         annotate(node, TypeInfo{});
+        return target.symbolIndex >= 0 &&
+               target.symbolIndex == currentFunctionResultIndex_;
     }
 
-    void visitConditional(AstNode &node, const std::string &name) {
+    bool visitConditional(AstNode &node, const std::string &name) {
         if (!node.children.empty()) {
             ExprInfo condition = evalExpression(node.children[0]);
             requireBoolean(condition.type, name + " condition");
         }
-        for (std::size_t i = 1; i < node.children.size(); ++i) {
-            visitStatement(node.children[i]);
-        }
+        const bool thenAssigns =
+            node.children.size() > 1 ? visitStatement(node.children[1]) : false;
+        const bool elseAssigns =
+            node.children.size() > 2 ? visitStatement(node.children[2]) : false;
         annotate(node, TypeInfo{});
+        return node.children.size() > 2 && thenAssigns && elseAssigns;
     }
 
-    void visitLoop(AstNode &node, const std::string &name) {
+    bool visitLoop(AstNode &node, const std::string &name) {
         if (!node.children.empty()) {
             ExprInfo condition = evalExpression(node.children[0]);
             requireBoolean(condition.type, name + " condition");
@@ -499,23 +610,26 @@ class SemanticAnalyzer {
             visitStatement(node.children[1]);
         }
         annotate(node, TypeInfo{});
+        return false;
     }
 
-    void visitRepeat(AstNode &node) {
+    bool visitRepeat(AstNode &node) {
+        bool bodyAssigns = false;
         if (!node.children.empty()) {
-            visitStatement(node.children[0]);
+            bodyAssigns = visitStatement(node.children[0]);
         }
         if (node.children.size() > 1) {
             ExprInfo condition = evalExpression(node.children[1]);
             requireBoolean(condition.type, "repeat condition");
         }
         annotate(node, TypeInfo{});
+        return bodyAssigns;
     }
 
-    void visitFor(AstNode &node) {
+    bool visitFor(AstNode &node) {
         if (node.children.empty()) {
             annotate(node, TypeInfo{});
-            return;
+            return false;
         }
 
         ExprInfo counter = evalIdentifier(node.children[0], true);
@@ -541,11 +655,13 @@ class SemanticAnalyzer {
             visitStatement(node.children[3]);
         }
         annotate(node, TypeInfo{});
+        return false;
     }
 
-    void visitCase(AstNode &node) {
+    bool visitCase(AstNode &node) {
         ExprInfo selector =
             node.children.empty() ? ExprInfo{} : evalExpression(node.children[0]);
+        bool allBranchesAssign = node.children.size() > 1;
         for (std::size_t i = 1; i < node.children.size(); ++i) {
             AstNode &branch = node.children[i];
             if (branch.children.size() > 0) {
@@ -557,11 +673,15 @@ class SemanticAnalyzer {
                 }
             }
             if (branch.children.size() > 1) {
-                visitStatement(branch.children[1]);
+                allBranchesAssign =
+                    visitStatement(branch.children[1]) && allBranchesAssign;
+            } else {
+                allBranchesAssign = false;
             }
             annotate(branch, TypeInfo{});
         }
         annotate(node, TypeInfo{});
+        return allBranchesAssign;
     }
 
     ExprInfo evalExpression(AstNode &node) {
@@ -613,6 +733,8 @@ class SemanticAnalyzer {
                 info.intValue = static_cast<unsigned char>(node.text[1]);
             } else {
                 info.type.kind = TypeKind::String;
+                info.type.hasStringLength = true;
+                info.type.stringLength = static_cast<int>(node.text.size()) - 2;
             }
         } else {
             info.type.kind = TypeKind::None;
@@ -635,6 +757,13 @@ class SemanticAnalyzer {
         info.symbolIndex = index;
         if (entry.obj == ObjectKind::Constant) {
             parseConstantEntryValue(entry, info);
+            if (entry.type == TypeKind::String && entry.literalValue.size() >= 2 &&
+                entry.literalValue.front() == '\'' &&
+                entry.literalValue.back() == '\'') {
+                info.type.hasStringLength = true;
+                info.type.stringLength =
+                    static_cast<int>(entry.literalValue.size()) - 2;
+            }
         }
         if (!asLValue && entry.obj == ObjectKind::Procedure) {
             error("Procedure has no return value: " + node.text);
@@ -892,13 +1021,22 @@ class SemanticAnalyzer {
                 left.kind == TypeKind::Enum) {
                 return left.ref == right.ref;
             }
+            if (left.kind == TypeKind::String && left.hasStringLength &&
+                right.hasStringLength) {
+                return left.stringLength == right.stringLength;
+            }
             return true;
+        }
+        if (left.kind == TypeKind::Enum || right.kind == TypeKind::Enum) {
+            const TypeInfo &enumType =
+                left.kind == TypeKind::Enum ? left : right;
+            const TypeInfo &other =
+                left.kind == TypeKind::Enum ? right : left;
+            return enumType.base != TypeKind::None &&
+                   enumType.base == underlying(other);
         }
         if (left.kind == TypeKind::Subrange || right.kind == TypeKind::Subrange) {
             return underlying(left) == underlying(right);
-        }
-        if (left.kind == TypeKind::String && right.kind == TypeKind::String) {
-            return true;
         }
         return false;
     }
@@ -921,6 +1059,10 @@ class SemanticAnalyzer {
             return true;
         }
         if (target.kind == TypeKind::Subrange && hasIntValue &&
+            (intValue < target.low || intValue > target.high)) {
+            return false;
+        }
+        if (target.kind == TypeKind::Enum && target.hasRange && hasIntValue &&
             (intValue < target.low || intValue > target.high)) {
             return false;
         }
@@ -957,6 +1099,11 @@ class SemanticAnalyzer {
         } else if (literal == "false") {
             info.hasIntValue = true;
             info.intValue = 0;
+        } else if (entry.literalValue.size() == 3 &&
+                   entry.literalValue.front() == '\'' &&
+                   entry.literalValue.back() == '\'') {
+            info.hasIntValue = true;
+            info.intValue = static_cast<unsigned char>(entry.literalValue[1]);
         } else {
             int intValue = 0;
             if (parseInt(entry.literalValue, intValue)) {

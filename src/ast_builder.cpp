@@ -355,7 +355,7 @@ AstNode buildVariable(const ParseNode &node) {
                 if (hasTokenName(indexNode, "comma")) {
                     continue;
                 }
-                access.addChild(buildAtomicValueNode(indexNode));
+                access.addChild(buildExpression(indexNode));
             }
             variable.addChild(access);
         } else {

@@ -86,6 +86,8 @@ TypeInfo typeFromEntry(const TabEntry &entry) {
     if (entry.type == TypeKind::Subrange) {
         type.base = static_cast<TypeKind>(entry.ref);
         type.hasRange = parseRangeLiteral(entry.literalValue, type.low, type.high);
+    } else if (entry.type == TypeKind::Enum) {
+        type.hasRange = parseRangeLiteral(entry.literalValue, type.low, type.high);
     }
     return type;
 }
@@ -103,6 +105,8 @@ class SemanticAnalyzer {
     AstNode ast_;
     SymbolTable symbols_;
     std::vector<SemanticDiagnostic> diagnostics_;
+    int nextEnumRef_ = 1;
+    int currentFunctionResultIndex_ = -1;
 
     void error(const std::string &message) {
         diagnostics_.push_back({SemanticDiagnostic::Severity::Error, message});
@@ -234,7 +238,10 @@ class SemanticAnalyzer {
             visitDeclarations(node.children[2]);
         }
         if (node.children.size() > 3) {
+            const int previousFunctionResultIndex = currentFunctionResultIndex_;
+            currentFunctionResultIndex_ = outerIndex;
             visitStatement(node.children[3]);
+            currentFunctionResultIndex_ = previousFunctionResultIndex;
         }
         symbols_.popScope();
     }
@@ -364,27 +371,22 @@ class SemanticAnalyzer {
     }
 
     TypeInfo resolveEnumType(AstNode &node) {
-        TypeInfo firstType;
-        bool hasFirst = false;
-        for (AstNode &ident : node.children) {
-            const int index = symbols_.lookup(ident.text);
-            if (index < 0) {
-                error("Undeclared enumerated identifier: " + ident.text);
-                annotate(ident, TypeInfo{});
-                continue;
-            }
-            TypeInfo current = typeFromEntry(symbols_.tabEntry(index));
-            annotate(ident, current, index);
-            if (!hasFirst) {
-                firstType = current;
-                hasFirst = true;
-            } else if (!sameBaseType(firstType, current)) {
-                error("Enumerated identifiers must have the same type");
-            }
-        }
-
         TypeInfo type;
         type.kind = TypeKind::Enum;
+        type.ref = nextEnumRef_++;
+        type.hasRange = !node.children.empty();
+        type.low = 0;
+        type.high = static_cast<int>(node.children.size()) - 1;
+
+        int ordinal = 0;
+        for (AstNode &ident : node.children) {
+            const int index =
+                insertSymbol(ident.text, ObjectKind::Constant, type, true,
+                             std::to_string(ordinal));
+            annotate(ident, type, index);
+            ++ordinal;
+        }
+
         annotate(node, type);
         return type;
     }
@@ -644,8 +646,11 @@ class SemanticAnalyzer {
         if (!asLValue && entry.obj == ObjectKind::Variable && !entry.initialized) {
             warning("Variable may be used before initialization: " + node.text);
         }
+        const bool isCurrentFunctionResult =
+            entry.obj == ObjectKind::Function && index == currentFunctionResultIndex_;
         if (asLValue && entry.obj != ObjectKind::Variable &&
-            entry.obj != ObjectKind::Parameter && entry.obj != ObjectKind::Field) {
+            entry.obj != ObjectKind::Parameter && entry.obj != ObjectKind::Field &&
+            !isCurrentFunctionResult) {
             error("Identifier is not assignable: " + node.text);
         }
         if (!asLValue &&
@@ -883,7 +888,8 @@ class SemanticAnalyzer {
             return true;
         }
         if (left.kind == right.kind) {
-            if (left.kind == TypeKind::Array || left.kind == TypeKind::Record) {
+            if (left.kind == TypeKind::Array || left.kind == TypeKind::Record ||
+                left.kind == TypeKind::Enum) {
                 return left.ref == right.ref;
             }
             return true;

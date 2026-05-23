@@ -15,10 +15,6 @@ ParseNode makeTokenNode(const Token &token) {
     return ParseNode(label);
 }
 
-bool statementConsumesTrailingSemicolon(TokenType type) {
-    return type == WHILESY || type == FORSY;
-}
-
 } // namespace
 
 Parser::Parser(std::vector<Token> tokens) : pos_(0) {
@@ -502,12 +498,7 @@ ParseNode Parser::parseStatementList(TokenType terminator) {
     ParseNode node("<statement-list>");
 
     while (!check(terminator)) {
-        const TokenType startType = current().type;
         node.addChild(parseStatement());
-
-        if (statementConsumesTrailingSemicolon(startType)) {
-            continue;
-        }
 
         if (!check(SEMICOLON)) {
             break;
@@ -596,19 +587,11 @@ ParseNode Parser::parseVariable() {
             component.addChild(consume(LBRACK));
 
             ParseNode indexList("<index-list>");
-            if (check(INTCON) || check(CHARCON) || check(IDENT)) {
-                indexList.addChild(consume(current().type));
-            } else {
-                syntaxError("expected array index");
-            }
+            indexList.addChild(parseExpression());
 
             while (check(COMMA)) {
                 indexList.addChild(consume(COMMA));
-                if (check(INTCON) || check(CHARCON) || check(IDENT)) {
-                    indexList.addChild(consume(current().type));
-                } else {
-                    syntaxError("expected array index");
-                }
+                indexList.addChild(parseExpression());
             }
 
             component.addChild(indexList);
@@ -716,9 +699,6 @@ ParseNode Parser::parseWhileStatement() {
     // compound-statement
     node.addChild(parseCompoundStatement());
 
-    // semicolon
-    node.addChild(consume(SEMICOLON));
-
     return node;
 }
 
@@ -772,9 +752,6 @@ ParseNode Parser::parseForStatement() {
 
     // compound-statement
     node.addChild(parseCompoundStatement());
-
-    // semicolon
-    node.addChild(consume(SEMICOLON));
 
     return node;
 }

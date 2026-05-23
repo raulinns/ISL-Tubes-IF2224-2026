@@ -1,0 +1,8 @@
+program BadArrayIndex;
+
+var
+  numbers: array[1..3] of integer;
+
+begin
+  numbers[4] := 99
+end.

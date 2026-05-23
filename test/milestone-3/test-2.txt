@@ -1,0 +1,8 @@
+program BadAssignment;
+
+var
+  x: integer;
+
+begin
+  x := 'hello'
+end.

@@ -1,0 +1,15 @@
+program ValidBasic;
+
+const
+  LIMIT == 10;
+var
+  x, y: integer;
+  ok: boolean;
+
+begin
+  x := 3;
+  y := x + LIMIT;
+  ok := y > 5;
+  if ok then
+    writeln('valid')
+end.

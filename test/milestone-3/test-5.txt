@@ -1,0 +1,11 @@
+program MissingReturn;
+
+function choose(x: integer): integer;
+begin
+  if x > 0 then
+    choose := 1
+end;
+
+begin
+  writeln(choose(5))
+end.

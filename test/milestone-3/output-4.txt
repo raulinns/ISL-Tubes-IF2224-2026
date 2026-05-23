@@ -1,0 +1,79 @@
+----- Decorated AST -----
+
+Program(BadArrayIndex) [type=none, sym=37, level=0]
+|-- Declarations [type=none, level=0]
+|   \-- VarDecl(numbers) [type=array, sym=38, level=0]
+|       \-- ArrayType [type=array, level=0]
+|           |-- RangeType [type=subrange, level=0]
+|           |   |-- Literal(1) [type=integer, level=0]
+|           |   \-- Literal(3) [type=integer, level=0]
+|           \-- NamedType(integer) [type=integer, sym=22, level=0]
+\-- CompoundStmt [type=none, level=1]
+    \-- AssignStmt [type=none, level=1]
+        |-- Variable(numbers) [type=integer, sym=38, level=1]
+        |   \-- IndexAccess [type=integer, level=1]
+        |       \-- Literal(4) [type=integer, level=1]
+        \-- Literal(99) [type=integer, level=1]
+
+----- Symbol Table -----
+
+tab
+----------------------------------------------------------------------------------------------
+idx  identifier        obj         type      ref   nrm   lev   adr   link  init   value
+----------------------------------------------------------------------------------------------
+0    <dummy>           none        none      0     1     0     0     0     1      
+1    and               reserved    none      0     1     0     0     0     1      
+2    array             reserved    none      0     1     0     0     1     1      
+3    begin             reserved    none      0     1     0     0     2     1      
+4    case              reserved    none      0     1     0     0     3     1      
+5    const             reserved    none      0     1     0     0     4     1      
+6    div               reserved    none      0     1     0     0     5     1      
+7    downto            reserved    none      0     1     0     0     6     1      
+8    do                reserved    none      0     1     0     0     7     1      
+9    else              reserved    none      0     1     0     0     8     1      
+10   end               reserved    none      0     1     0     0     9     1      
+11   for               reserved    none      0     1     0     0     10    1      
+12   function          reserved    none      0     1     0     0     11    1      
+13   if                reserved    none      0     1     0     0     12    1      
+14   mod               reserved    none      0     1     0     0     13    1      
+15   not               reserved    none      0     1     0     0     14    1      
+16   of                reserved    none      0     1     0     0     15    1      
+17   or                reserved    none      0     1     0     0     16    1      
+18   procedure         reserved    none      0     1     0     0     17    1      
+19   program           reserved    none      0     1     0     0     18    1      
+20   record            reserved    none      0     1     0     0     19    1      
+21   repeat            reserved    none      0     1     0     0     20    1      
+22   integer           type        integer   0     1     0     0     21    1      
+23   real              type        real      0     1     0     0     22    1      
+24   boolean           type        boolean   0     1     0     0     23    1      
+25   char              type        char      0     1     0     0     24    1      
+26   string            type        string    0     1     0     0     25    1      
+27   then              reserved    none      0     1     0     0     26    1      
+28   to                reserved    none      0     1     0     0     27    1      
+29   type              reserved    none      0     1     0     0     28    1      
+30   until             reserved    none      0     1     0     0     29    1      
+31   var               reserved    none      0     1     0     0     30    1      
+32   while             reserved    none      0     1     0     0     31    1      
+33   true              constant    boolean   0     1     0     1     32    1      true
+34   false             constant    boolean   0     1     0     0     33    1      false
+35   readln            procedure   none      0     1     0     0     34    1      
+36   writeln           procedure   none      0     1     0     0     35    1      
+37   badarrayindex     program     none      0     1     0     0     36    1      
+38   numbers           variable    array     0     1     0     0     37    1      
+
+btab
+------------------------------------------------
+idx  kind        last   lpar   psze   vsze
+------------------------------------------------
+0    program     38     0      0      1
+1    compound    0      0      0      0
+
+atab
+--------------------------------------------------------------
+idx  xtyp      etyp      eref   low    high   elsz   size
+--------------------------------------------------------------
+0    integer   integer   0      1      3      1      3
+
+----- Semantic Diagnostics -----
+
+error: Array index literal is outside declared bounds

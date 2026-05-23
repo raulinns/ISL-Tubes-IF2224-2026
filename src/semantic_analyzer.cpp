@@ -329,6 +329,18 @@ class SemanticAnalyzer {
         for (AstNode &param : node.children) {
             TypeInfo type =
                 param.children.empty() ? TypeInfo{} : resolveType(param.children[0]);
+
+            const int existingIndex = symbols_.lookup(param.text);
+            if (existingIndex >= 0) {
+                const TabEntry &existing = symbols_.tabEntry(existingIndex);
+                if (existing.lev == 0 &&
+                    (existing.obj == ObjectKind::Variable ||
+                    existing.obj == ObjectKind::Constant)) {
+                    error("Formal parameter cannot reuse global const/var identifier: " +
+                        param.text);
+                }
+            }
+
             const int index =
                 insertSymbol(param.text, ObjectKind::Parameter, type, true,
                              typeMetadataLiteral(type));

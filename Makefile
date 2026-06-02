@@ -2,10 +2,11 @@ CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra -O2
 TARGET   := arion
 SRCDIR   := src
+M4DIR    := $(SRCDIR)/milestone4
 OBJDIR   := build
 
-SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp $(SRCDIR)/symbol_table.cpp $(SRCDIR)/semantic_analyzer.cpp
-OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o $(OBJDIR)/symbol_table.o $(OBJDIR)/semantic_analyzer.o
+SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp $(SRCDIR)/symbol_table.cpp $(SRCDIR)/semantic_analyzer.cpp $(M4DIR)/intermediate_code.cpp $(M4DIR)/codegen_context.cpp $(M4DIR)/runtime_value.cpp
+OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o $(OBJDIR)/symbol_table.o $(OBJDIR)/semantic_analyzer.o $(OBJDIR)/intermediate_code.o $(OBJDIR)/codegen_context.o $(OBJDIR)/runtime_value.o
 
 all: $(TARGET)
 
@@ -34,6 +35,15 @@ $(OBJDIR)/symbol_table.o: $(SRCDIR)/symbol_table.cpp $(SRCDIR)/symbol_table.h | 
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/semantic_analyzer.o: $(SRCDIR)/semantic_analyzer.cpp $(SRCDIR)/semantic_analyzer.h $(SRCDIR)/ast.h $(SRCDIR)/symbol_table.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/intermediate_code.o: $(M4DIR)/intermediate_code.cpp $(M4DIR)/intermediate_code.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/codegen_context.o: $(M4DIR)/codegen_context.cpp $(M4DIR)/codegen_context.h $(M4DIR)/intermediate_code.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/runtime_value.o: $(M4DIR)/runtime_value.cpp $(M4DIR)/runtime_value.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR):

@@ -1,0 +1,55 @@
+#ifndef INTERMEDIATE_CODE_H
+#define INTERMEDIATE_CODE_H
+
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <vector>
+
+enum class OpCode {
+    LIT = 1,
+    LOD = 2,
+    STO = 3,
+    CAL = 4,
+    INT = 5,
+    JMP = 6,
+    JPC = 7,
+    OPR = 8,
+    RET = 9
+};
+
+enum class OprCode {
+    NEG = 1,
+    ADD = 2,
+    SUB = 3,
+    MUL = 4,
+    DIV = 5,
+    MOD = 6,
+    EQL = 7,
+    NEQ = 8,
+    LSS = 9,
+    GEQ = 10,
+    GTR = 11,
+    LEQ = 12,
+    WRT = 13,
+    WRTLN = 14
+};
+
+struct Instruction {
+    OpCode op;
+    int level;
+    int arg;
+    std::string comment;
+
+    Instruction(OpCode opcode, int lexicalLevel, int argument,
+                std::string note = "");
+};
+
+std::string opcodeToString(OpCode op);
+std::optional<OprCode> decodeOprCode(int value);
+std::string oprCodeToString(OprCode op);
+std::string renderInstruction(const Instruction &instruction,
+                              std::size_t index);
+std::string renderIntermediateCode(const std::vector<Instruction> &code);
+
+#endif // INTERMEDIATE_CODE_H

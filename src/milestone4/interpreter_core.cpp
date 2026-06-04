@@ -139,6 +139,3 @@ void executeInstruction(Interpreter &interpreter,
     throw ArionRuntimeError("Unknown interpreter opcode");
 }
 
-void executeOprInstruction(Interpreter &, const Instruction &instruction) {
-    unsupportedInterpreterInstruction(instruction, "Akram/Endra");
-}

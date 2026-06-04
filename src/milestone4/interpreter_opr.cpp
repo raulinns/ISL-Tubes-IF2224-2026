@@ -203,8 +203,8 @@ int compareValues(const RuntimeValue &left, const RuntimeValue &right,
 
 } // namespace
 
-void executeOprInstructionAkram(Interpreter &interpreter,
-                                const Instruction &instruction) {
+void executeOprInstruction(Interpreter &interpreter,
+                           const Instruction &instruction) {
     const std::optional<OprCode> decoded = decodeOprCode(instruction.arg);
     if (!decoded.has_value()) {
         throw ArionRuntimeError("Unknown OPR code: " +

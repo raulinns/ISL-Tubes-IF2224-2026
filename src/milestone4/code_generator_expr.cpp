@@ -9,9 +9,6 @@
 
 namespace {
 
-void generateExpressionAkram(const AstNode &node, const SymbolTable &symbols,
-                             CodeGenContext &context);
-
 std::string lowerCopy(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
@@ -123,18 +120,18 @@ void generateUnaryExpression(const AstNode &node, const SymbolTable &symbols,
 
     const std::string op = lowerCopy(node.text);
     if (op == "plus") {
-        generateExpressionAkram(node.children[0], symbols, context);
+        generateExpression(node.children[0], symbols, context);
         return;
     }
 
     if (op == "minus") {
-        generateExpressionAkram(node.children[0], symbols, context);
+        generateExpression(node.children[0], symbols, context);
         emitOpr(context, OprCode::NEG, op);
         return;
     }
 
     if (op == "notsy") {
-        generateExpressionAkram(node.children[0], symbols, context);
+        generateExpression(node.children[0], symbols, context);
         emitLiteralFromText(context, "false", "boolean");
         emitOpr(context, OprCode::EQL, op);
         return;
@@ -150,8 +147,8 @@ void generateBinaryExpression(const AstNode &node, const SymbolTable &symbols,
     }
 
     const std::string op = lowerCopy(node.text);
-    generateExpressionAkram(node.children[0], symbols, context);
-    generateExpressionAkram(node.children[1], symbols, context);
+    generateExpression(node.children[0], symbols, context);
+    generateExpression(node.children[1], symbols, context);
 
     if (op == "plus") {
         emitOpr(context, OprCode::ADD, op);
@@ -209,8 +206,10 @@ void generateBinaryExpression(const AstNode &node, const SymbolTable &symbols,
     throw std::runtime_error("Unsupported binary operator: " + node.text);
 }
 
-void generateExpressionAkram(const AstNode &node, const SymbolTable &symbols,
-                             CodeGenContext &context) {
+} // namespace
+
+void generateExpression(const AstNode &node, const SymbolTable &symbols,
+                        CodeGenContext &context) {
     switch (node.kind) {
     case AstKind::Literal:
         emitLiteralFromText(context, node.text, lowerCopy(node.inferredType));
@@ -236,5 +235,3 @@ void generateExpressionAkram(const AstNode &node, const SymbolTable &symbols,
         unsupportedCodegenNode(node, "Akram/Endra");
     }
 }
-
-} // namespace

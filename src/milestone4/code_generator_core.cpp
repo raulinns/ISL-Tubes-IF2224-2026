@@ -234,31 +234,6 @@ void generateStatement(const AstNode &node, const SymbolTable &symbols,
     }
 }
 
-void generateExpression(const AstNode &node, const SymbolTable &symbols,
-                        CodeGenContext &context) {
-    switch (node.kind) {
-    case AstKind::Literal:
-        emitLiteralFromText(context, node.text, lowerCopy(node.inferredType));
-        return;
-    case AstKind::Identifier:
-        generateIdentifierExpression(node, symbols, context);
-        return;
-    case AstKind::Variable: {
-        const int address = scalarAddressForVariable(node, symbols, context);
-        context.emit(OpCode::LOD, 0, address);
-        return;
-    }
-    case AstKind::BinaryExpr:
-    case AstKind::UnaryExpr:
-        unsupportedCodegenNode(node, "Akram");
-    case AstKind::Call:
-        generateCall(node, symbols, context, true);
-        return;
-    default:
-        unsupportedCodegenNode(node, "Akram/Endra");
-    }
-}
-
 void generateCall(const AstNode &node, const SymbolTable &, CodeGenContext &,
                   bool) {
     unsupportedCodegenNode(node, "Endra");

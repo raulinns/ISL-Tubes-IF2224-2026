@@ -5,8 +5,8 @@ SRCDIR   := src
 M4DIR    := $(SRCDIR)/milestone4
 OBJDIR   := build
 
-SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp $(SRCDIR)/symbol_table.cpp $(SRCDIR)/semantic_analyzer.cpp $(M4DIR)/intermediate_code.cpp $(M4DIR)/codegen_context.cpp $(M4DIR)/runtime_value.cpp $(M4DIR)/runtime_stack.cpp $(M4DIR)/code_generator_core.cpp $(M4DIR)/interpreter_core.cpp
-OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o $(OBJDIR)/symbol_table.o $(OBJDIR)/semantic_analyzer.o $(OBJDIR)/intermediate_code.o $(OBJDIR)/codegen_context.o $(OBJDIR)/runtime_value.o $(OBJDIR)/runtime_stack.o $(OBJDIR)/code_generator_core.o $(OBJDIR)/interpreter_core.o
+SRCS := $(SRCDIR)/main.cpp $(SRCDIR)/lexer.cpp $(SRCDIR)/parser.cpp $(SRCDIR)/parse_tree.cpp $(SRCDIR)/ast.cpp $(SRCDIR)/ast_builder.cpp $(SRCDIR)/symbol_table.cpp $(SRCDIR)/semantic_analyzer.cpp $(M4DIR)/intermediate_code.cpp $(M4DIR)/codegen_context.cpp $(M4DIR)/runtime_value.cpp $(M4DIR)/runtime_stack.cpp $(M4DIR)/code_generator_core.cpp $(M4DIR)/code_generator_expr.cpp $(M4DIR)/interpreter_core.cpp $(M4DIR)/interpreter_opr.cpp
+OBJS := $(OBJDIR)/main.o $(OBJDIR)/lexer.o $(OBJDIR)/parser.o $(OBJDIR)/parse_tree.o $(OBJDIR)/ast.o $(OBJDIR)/ast_builder.o $(OBJDIR)/symbol_table.o $(OBJDIR)/semantic_analyzer.o $(OBJDIR)/intermediate_code.o $(OBJDIR)/codegen_context.o $(OBJDIR)/runtime_value.o $(OBJDIR)/runtime_stack.o $(OBJDIR)/code_generator_core.o $(OBJDIR)/code_generator_expr.o $(OBJDIR)/interpreter_core.o $(OBJDIR)/interpreter_opr.o
 
 all: $(TARGET)
 
@@ -52,7 +52,13 @@ $(OBJDIR)/runtime_stack.o: $(M4DIR)/runtime_stack.cpp $(M4DIR)/runtime_stack.h $
 $(OBJDIR)/code_generator_core.o: $(M4DIR)/code_generator_core.cpp $(M4DIR)/code_generator.h $(M4DIR)/codegen_context.h $(M4DIR)/intermediate_code.h $(M4DIR)/runtime_value.h $(SRCDIR)/ast.h $(SRCDIR)/symbol_table.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
+$(OBJDIR)/code_generator_expr.o: $(M4DIR)/code_generator_expr.cpp $(M4DIR)/code_generator.h $(M4DIR)/codegen_context.h $(M4DIR)/intermediate_code.h $(M4DIR)/runtime_value.h $(SRCDIR)/ast.h $(SRCDIR)/symbol_table.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 $(OBJDIR)/interpreter_core.o: $(M4DIR)/interpreter_core.cpp $(M4DIR)/interpreter.h $(M4DIR)/intermediate_code.h $(M4DIR)/runtime_stack.h $(M4DIR)/runtime_value.h $(M4DIR)/arion_runtime_error.h | $(OBJDIR)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
+$(OBJDIR)/interpreter_opr.o: $(M4DIR)/interpreter_opr.cpp $(M4DIR)/interpreter.h $(M4DIR)/intermediate_code.h $(M4DIR)/runtime_stack.h $(M4DIR)/runtime_value.h $(M4DIR)/arion_runtime_error.h | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR):

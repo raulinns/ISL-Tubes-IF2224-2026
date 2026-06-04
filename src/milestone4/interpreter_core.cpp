@@ -14,6 +14,48 @@ RuntimeValue literalValueForInstruction(const Instruction &instruction) {
     return RuntimeValue::makeInteger(instruction.arg);
 }
 
+bool isFalseJumpCondition(const RuntimeValue &value) {
+    switch (value.kind()) {
+    case RuntimeValueKind::Boolean:
+        return !value.asBoolean();
+    case RuntimeValueKind::Integer:
+        return value.asInteger() == 0;
+    case RuntimeValueKind::Real:
+    case RuntimeValueKind::Char:
+    case RuntimeValueKind::String:
+    case RuntimeValueKind::Uninitialized:
+        throw RuntimeTypeError("JPC condition must be boolean or integer");
+    }
+
+    throw RuntimeTypeError("JPC condition must be boolean or integer");
+}
+
+void jumpToInstruction(Interpreter &interpreter, int target) {
+    // Jumps may only target existing instructions.
+    if (!interpreter.hasInstruction(target)) {
+        throw InvalidJumpTargetError("Invalid jump target: " +
+                                     std::to_string(target));
+    }
+    interpreter.setInstructionPointer(target);
+}
+
+void validateJumpTargets(const std::vector<Instruction> &code) {
+    // Validate all jump targets before the VM starts executing.
+    for (std::size_t index = 0; index < code.size(); ++index) {
+        const Instruction &instruction = code[index];
+        if (instruction.op != OpCode::JMP && instruction.op != OpCode::JPC) {
+            continue;
+        }
+        if (instruction.arg < 0 ||
+            instruction.arg >= static_cast<int>(code.size())) {
+            throw InvalidJumpTargetError(
+                "Invalid jump target at instruction " +
+                std::to_string(index) + ": Label not found for target " +
+                std::to_string(instruction.arg));
+        }
+    }
+}
+
 [[noreturn]] void unsupportedInterpreterInstruction(const Instruction &instruction,
                                                     const std::string &ownerHint) {
     throw ArionRuntimeError("Milestone 4 placeholder: interpreter instruction " +
@@ -38,6 +80,7 @@ void Interpreter::reset() {
 
 void Interpreter::load(std::vector<Instruction> code) {
     reset();
+    validateJumpTargets(code);
     code_ = std::move(code);
     halted_ = code_.empty();
 }
@@ -129,8 +172,15 @@ void executeInstruction(Interpreter &interpreter,
     case OpCode::CAL:
         unsupportedInterpreterInstruction(instruction, "Endra");
     case OpCode::JMP:
+        jumpToInstruction(interpreter, instruction.arg);
+        return;
     case OpCode::JPC:
-        unsupportedInterpreterInstruction(instruction, "Steven");
+        if (isFalseJumpCondition(interpreter.stack().popValue())) {
+            jumpToInstruction(interpreter, instruction.arg);
+        } else {
+            interpreter.advance();
+        }
+        return;
     case OpCode::OPR:
         executeOprInstruction(interpreter, instruction);
         return;

@@ -1,7 +1,5 @@
 #include "code_generator.h"
 
-#include "runtime_value.h"
-
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
@@ -39,36 +37,6 @@ bool isSimpleRuntimeType(TypeKind type) {
            type == TypeKind::Enum;
 }
 
-int intPayloadForLiteral(const std::string &literal,
-                         const std::string &declaredType) {
-    try {
-        const RuntimeValue value = RuntimeValue::parseLiteral(literal, declaredType);
-        switch (value.kind()) {
-        case RuntimeValueKind::Integer:
-            return value.asInteger();
-        case RuntimeValueKind::Boolean:
-            return value.asBoolean() ? 1 : 0;
-        case RuntimeValueKind::Char:
-            return static_cast<unsigned char>(value.asChar());
-        case RuntimeValueKind::Real:
-        case RuntimeValueKind::String:
-        case RuntimeValueKind::Uninitialized:
-            return 0;
-        }
-    } catch (const std::exception &) {
-        return 0;
-    }
-
-    return 0;
-}
-
-void emitLiteralFromText(CodeGenContext &context, const std::string &literal,
-                         const std::string &declaredType,
-                         const std::string &comment = "") {
-    context.emitLiteral(0, intPayloadForLiteral(literal, declaredType), literal,
-                        comment);
-}
-
 void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
                           CodeGenContext &context) {
     if (node.kind != AstKind::Declarations) {
@@ -81,7 +49,7 @@ void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
         case AstKind::TypeDecl:
             break;
         case AstKind::VarDecl: {
-            const TabEntry &entry =
+            const TabEntry entry =
                 entryForSymbol(symbols, decl.symbolIndex, "Variable declaration");
             if (!isSimpleRuntimeType(entry.type)) {
                 unsupportedCodegenNode(decl, "array/record runtime layout");
@@ -107,7 +75,7 @@ int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
         unsupportedCodegenNode(node, "array/record runtime layout");
     }
 
-    const TabEntry &entry =
+    const TabEntry entry =
         entryForSymbol(symbols, node.symbolIndex, "Variable access");
     if (entry.obj != ObjectKind::Variable && entry.obj != ObjectKind::Parameter) {
         throw std::runtime_error("Identifier is not stored in runtime memory: " +
@@ -139,29 +107,6 @@ void generateDeclarations(const AstNode &node) {
     }
 }
 
-void generateIdentifierExpression(const AstNode &node, const SymbolTable &symbols,
-                                  CodeGenContext &context) {
-    const TabEntry &entry =
-        entryForSymbol(symbols, node.symbolIndex, "Identifier expression");
-
-    if (entry.obj == ObjectKind::Constant) {
-        emitLiteralFromText(context, entry.literalValue, typeKindToString(entry.type));
-        return;
-    }
-
-    if (entry.obj == ObjectKind::Variable || entry.obj == ObjectKind::Parameter) {
-        const int address = scalarAddressForVariable(node, symbols, context);
-        context.emit(OpCode::LOD, 0, address);
-        return;
-    }
-
-    if (entry.obj == ObjectKind::Function) {
-        unsupportedCodegenNode(node, "Endra");
-    }
-
-    throw std::runtime_error("Identifier is not a runtime value: " + node.text);
-}
-
 void generateAssignment(const AstNode &node, const SymbolTable &symbols,
                         CodeGenContext &context) {
     if (node.children.size() < 2) {
@@ -171,6 +116,129 @@ void generateAssignment(const AstNode &node, const SymbolTable &symbols,
     generateExpression(node.children[1], symbols, context);
     const int address = scalarAddressForVariable(node.children[0], symbols, context);
     context.emit(OpCode::STO, 0, address);
+}
+
+void emitOpr(CodeGenContext &context, OprCode op,
+             const std::string &operatorHint = "") {
+    context.emit(OpCode::OPR, 0, static_cast<int>(op), operatorHint);
+}
+
+void generateIfStatement(const AstNode &node, const SymbolTable &symbols,
+                         CodeGenContext &context) {
+    if (node.children.size() < 2) {
+        throw std::runtime_error("IfStmt requires condition and then statement");
+    }
+
+    generateExpression(node.children[0], symbols, context);
+    const int falseJump = context.emit(OpCode::JPC, 0, 0, "if false");
+
+    generateStatement(node.children[1], symbols, context);
+
+    if (node.children.size() > 2) {
+        const int endJump = context.emit(OpCode::JMP, 0, 0, "if end");
+        context.patch(falseJump, context.nextInstructionIndex());
+        generateStatement(node.children[2], symbols, context);
+        context.patch(endJump, context.nextInstructionIndex());
+        return;
+    }
+
+    context.patch(falseJump, context.nextInstructionIndex());
+}
+
+void generateWhileStatement(const AstNode &node, const SymbolTable &symbols,
+                            CodeGenContext &context) {
+    if (node.children.size() < 2) {
+        throw std::runtime_error("WhileStmt requires condition and body");
+    }
+
+    const int start = context.nextInstructionIndex();
+    generateExpression(node.children[0], symbols, context);
+    const int exitJump = context.emit(OpCode::JPC, 0, 0, "while exit");
+    generateStatement(node.children[1], symbols, context);
+    context.emit(OpCode::JMP, 0, start, "while repeat");
+    context.patch(exitJump, context.nextInstructionIndex());
+}
+
+void generateRepeatStatement(const AstNode &node, const SymbolTable &symbols,
+                             CodeGenContext &context) {
+    if (node.children.size() < 2) {
+        throw std::runtime_error("RepeatStmt requires body and condition");
+    }
+
+    const int start = context.nextInstructionIndex();
+    generateStatement(node.children[0], symbols, context);
+    generateExpression(node.children[1], symbols, context);
+    context.emit(OpCode::JPC, 0, start, "repeat until");
+}
+
+void generateForStatement(const AstNode &node, const SymbolTable &symbols,
+                          CodeGenContext &context) {
+    if (node.children.size() < 4) {
+        throw std::runtime_error("ForStmt requires counter, bounds, and body");
+    }
+
+    const std::string direction = lowerCopy(node.text);
+    const bool isTo = direction == "to";
+    const bool isDownto = direction == "downto";
+    if (!isTo && !isDownto) {
+        throw std::runtime_error("Unsupported for direction: " + node.text);
+    }
+
+    const int counterAddress =
+        scalarAddressForVariable(node.children[0], symbols, context);
+
+    generateExpression(node.children[1], symbols, context);
+    context.emit(OpCode::STO, 0, counterAddress, "for init");
+
+    const int start = context.nextInstructionIndex();
+    context.emit(OpCode::LOD, 0, counterAddress, "for counter");
+    generateExpression(node.children[2], symbols, context);
+    emitOpr(context, isTo ? OprCode::LEQ : OprCode::GEQ,
+            isTo ? "for to" : "for downto");
+    const int exitJump = context.emit(OpCode::JPC, 0, 0, "for exit");
+
+    generateStatement(node.children[3], symbols, context);
+
+    context.emit(OpCode::LOD, 0, counterAddress, "for counter");
+    context.emit(OpCode::LIT, 0, 1, "for step");
+    emitOpr(context, isTo ? OprCode::ADD : OprCode::SUB,
+            isTo ? "for increment" : "for decrement");
+    context.emit(OpCode::STO, 0, counterAddress, "for update");
+    context.emit(OpCode::JMP, 0, start, "for repeat");
+    context.patch(exitJump, context.nextInstructionIndex());
+}
+
+void generateCaseStatement(const AstNode &node, const SymbolTable &symbols,
+                           CodeGenContext &context) {
+    if (node.children.empty()) {
+        throw std::runtime_error("CaseStmt requires selector expression");
+    }
+
+    std::vector<int> endJumps;
+    // Recheck the case expression for each case label because OPR EQL consumes both values.
+    for (std::size_t branchIndex = 1; branchIndex < node.children.size();
+         ++branchIndex) {
+        const AstNode &branch = node.children[branchIndex];
+        if (branch.children.size() < 2) {
+            throw std::runtime_error("CaseBranch requires labels and statement");
+        }
+
+        const AstNode &labels = branch.children[0];
+        for (const AstNode &label : labels.children) {
+            generateExpression(node.children[0], symbols, context);
+            generateExpression(label, symbols, context);
+            emitOpr(context, OprCode::EQL, "case label");
+            const int nextLabel = context.emit(OpCode::JPC, 0, 0, "case next");
+            generateStatement(branch.children[1], symbols, context);
+            endJumps.push_back(context.emit(OpCode::JMP, 0, 0, "case end"));
+            context.patch(nextLabel, context.nextInstructionIndex());
+        }
+    }
+
+    const int caseEnd = context.nextInstructionIndex();
+    for (const int jump : endJumps) {
+        context.patch(jump, caseEnd);
+    }
 }
 
 } // namespace
@@ -221,16 +289,25 @@ void generateStatement(const AstNode &node, const SymbolTable &symbols,
         generateAssignment(node, symbols, context);
         return;
     case AstKind::IfStmt:
+        generateIfStatement(node, symbols, context);
+        return;
     case AstKind::WhileStmt:
+        generateWhileStatement(node, symbols, context);
+        return;
     case AstKind::RepeatStmt:
+        generateRepeatStatement(node, symbols, context);
+        return;
     case AstKind::ForStmt:
+        generateForStatement(node, symbols, context);
+        return;
     case AstKind::CaseStmt:
-        unsupportedCodegenNode(node, "Steven");
+        generateCaseStatement(node, symbols, context);
+        return;
     case AstKind::Call:
         generateCall(node, symbols, context, false);
         return;
     default:
-        unsupportedCodegenNode(node, "Akram/Endra/Steven");
+        unsupportedCodegenNode(node, "Akram/Endra");
     }
 }
 

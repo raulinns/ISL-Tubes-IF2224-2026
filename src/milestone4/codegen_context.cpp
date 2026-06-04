@@ -15,6 +15,12 @@ int CodeGenContext::emit(OpCode op, int level, int arg,
     return emit(Instruction(op, level, arg, comment));
 }
 
+int CodeGenContext::emitLiteral(int level, int arg,
+                                const std::string &literalText,
+                                const std::string &comment) {
+    return emit(Instruction(OpCode::LIT, level, arg, literalText, comment));
+}
+
 int CodeGenContext::emit(const Instruction &instruction) {
     code_.push_back(instruction);
     return static_cast<int>(code_.size()) - 1;

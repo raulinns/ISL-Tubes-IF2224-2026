@@ -1,0 +1,9 @@
+program MemoryAssignment;
+
+var
+  a, b: integer;
+
+begin
+  a := 5;
+  b := a
+end.

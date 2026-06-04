@@ -7,6 +7,11 @@ Instruction::Instruction(OpCode opcode, int lexicalLevel, int argument,
                          std::string note)
     : op(opcode), level(lexicalLevel), arg(argument), comment(std::move(note)) {}
 
+Instruction::Instruction(OpCode opcode, int lexicalLevel, int argument,
+                         std::string literal, std::string note)
+    : op(opcode), level(lexicalLevel), arg(argument),
+      literalText(std::move(literal)), comment(std::move(note)) {}
+
 std::string opcodeToString(OpCode op) {
     switch (op) {
     case OpCode::LIT:
@@ -106,7 +111,12 @@ std::string renderInstruction(const Instruction &instruction,
                               std::size_t index) {
     std::ostringstream out;
     out << index << ' ' << opcodeToString(instruction.op) << ' '
-        << instruction.level << ' ' << instruction.arg;
+        << instruction.level << ' ';
+    if (instruction.op == OpCode::LIT && !instruction.literalText.empty()) {
+        out << instruction.literalText;
+    } else {
+        out << instruction.arg;
+    }
 
     if (!instruction.comment.empty()) {
         out << " ; " << instruction.comment;

@@ -39,10 +39,13 @@ struct Instruction {
     OpCode op;
     int level;
     int arg;
+    std::string literalText;
     std::string comment;
 
     Instruction(OpCode opcode, int lexicalLevel, int argument,
                 std::string note = "");
+    Instruction(OpCode opcode, int lexicalLevel, int argument,
+                std::string literal, std::string note);
 };
 
 std::string opcodeToString(OpCode op);

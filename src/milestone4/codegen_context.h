@@ -15,6 +15,8 @@ class CodeGenContext {
     void reset();
 
     int emit(OpCode op, int level, int arg, const std::string &comment = "");
+    int emitLiteral(int level, int arg, const std::string &literalText,
+                    const std::string &comment = "");
     int emit(const Instruction &instruction);
     void patch(int instructionIndex, int targetLine);
 

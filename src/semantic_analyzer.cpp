@@ -572,7 +572,8 @@ class SemanticAnalyzer {
         }
 
         const std::string normalized = SymbolTable::normalizeIdentifier(node.text);
-        if (normalized != "readln" && normalized != "writeln" && entry.ref > 0) {
+        if (normalized != "readln" && normalized != "write" &&
+            normalized != "writeln" && entry.ref > 0) {
             std::vector<ExprInfo> args;
             checkCallArguments(entry, args);
         }
@@ -961,14 +962,34 @@ class SemanticAnalyzer {
             error("Procedure has no return value: " + node.text);
         }
 
+        const std::string normalized = SymbolTable::normalizeIdentifier(node.text);
         std::vector<ExprInfo> args;
-        for (AstNode &arg : node.children) {
-            args.push_back(evalExpression(arg));
+        if (normalized == "readln") {
+            for (AstNode &arg : node.children) {
+                if (arg.kind != AstKind::Variable && arg.kind != AstKind::Identifier) {
+                    error("readln argument must be an assignable variable");
+                    args.push_back(evalExpression(arg));
+                    continue;
+                }
+
+                ExprInfo target = evalVariable(arg, true);
+                if (target.symbolIndex >= 0) {
+                    try {
+                        symbols_.markInitialized(target.symbolIndex);
+                    } catch (const std::exception &e) {
+                        error(e.what());
+                    }
+                }
+                args.push_back(target);
+            }
+        } else {
+            for (AstNode &arg : node.children) {
+                args.push_back(evalExpression(arg));
+            }
         }
 
-        const std::string normalized = SymbolTable::normalizeIdentifier(node.text);
-        if (isCallable && normalized != "readln" && normalized != "writeln" &&
-            entry.ref > 0) {
+        if (isCallable && normalized != "readln" && normalized != "write" &&
+            normalized != "writeln" && entry.ref > 0) {
             checkCallArguments(entry, args);
         }
 

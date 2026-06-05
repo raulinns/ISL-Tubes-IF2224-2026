@@ -7,6 +7,7 @@ CodeGenContext::CodeGenContext() : nextRuntimeAddress_(kFrameHeaderSize) {}
 void CodeGenContext::reset() {
     code_.clear();
     runtimeAddressBySymbol_.clear();
+    subprogramEntryBySymbol_.clear();
     nextRuntimeAddress_ = kFrameHeaderSize;
 }
 
@@ -85,6 +86,29 @@ int CodeGenContext::allocateRuntimeAddress(int symbolIndex) {
     const int allocated = nextRuntimeAddress_++;
     runtimeAddressBySymbol_[symbolIndex] = allocated;
     return allocated;
+}
+
+bool CodeGenContext::hasSubprogramEntry(int symbolIndex) const {
+    return subprogramEntryBySymbol_.count(symbolIndex) != 0U;
+}
+
+int CodeGenContext::subprogramEntryOf(int symbolIndex) const {
+    const auto it = subprogramEntryBySymbol_.find(symbolIndex);
+    if (it == subprogramEntryBySymbol_.end()) {
+        throw std::out_of_range("No subprogram entry bound for symbol index " +
+                                std::to_string(symbolIndex));
+    }
+    return it->second;
+}
+
+void CodeGenContext::bindSubprogramEntry(int symbolIndex, int entryPoint) {
+    if (symbolIndex < 0) {
+        throw std::invalid_argument("Symbol index cannot be negative");
+    }
+    if (entryPoint < 0) {
+        throw std::invalid_argument("Subprogram entry point cannot be negative");
+    }
+    subprogramEntryBySymbol_[symbolIndex] = entryPoint;
 }
 
 const std::vector<Instruction> &CodeGenContext::code() const { return code_; }

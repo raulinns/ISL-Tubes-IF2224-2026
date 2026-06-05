@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <istream>
 #include <string>
 #include <utility>
 
@@ -140,6 +141,37 @@ RuntimeValue moduloValues(const RuntimeValue &left, const RuntimeValue &right) {
         throw DivisionByZeroError("Modulo by zero");
     }
     return RuntimeValue::makeInteger(asInteger(left, "Modulo") % divisor);
+}
+
+RuntimeValue inputValueFromToken(const std::string &token,
+                                 const std::string &declaredType) {
+    const std::string type = lowerCopy(declaredType);
+    if (type == "string") {
+        return RuntimeValue::makeString(token);
+    }
+    if (type == "char" && token.size() == 1U) {
+        return RuntimeValue::makeChar(token[0]);
+    }
+    return RuntimeValue::parseLiteral(token, declaredType);
+}
+
+void executeReadln(Interpreter &interpreter, const Instruction &instruction) {
+    std::string token;
+    if (!(interpreter.input() >> token)) {
+        throw ArionRuntimeError("readln expected an input value");
+    }
+
+    try {
+        interpreter.stack().writeAt(
+            instruction.level,
+            inputValueFromToken(token, instruction.literalText));
+    } catch (const std::exception &e) {
+        throw RuntimeTypeError("readln cannot parse input '" + token +
+                               "' as " + instruction.literalText + ": " +
+                               e.what());
+    }
+
+    interpreter.advance();
 }
 
 int compareValues(const RuntimeValue &left, const RuntimeValue &right,
@@ -300,8 +332,25 @@ void executeOprInstruction(Interpreter &interpreter,
         return;
     }
     case OprCode::WRT:
-    case OprCode::WRTLN:
-        throw ArionRuntimeError(
-            "Milestone 4 placeholder: OPR write/writeln belongs to Endra integration");
+    case OprCode::WRTLN: {
+        if (*decoded == OprCode::WRTLN && hint == "writeln empty") {
+            interpreter.appendOutput("\n");
+            interpreter.advance();
+            return;
+        }
+
+        const RuntimeValue value =
+            popOperand(interpreter,
+                       *decoded == OprCode::WRT ? "WRT" : "WRTLN");
+        interpreter.appendOutput(value.toString());
+        if (*decoded == OprCode::WRTLN) {
+            interpreter.appendOutput("\n");
+        }
+        interpreter.advance();
+        return;
+    }
+    case OprCode::READLN:
+        executeReadln(interpreter, instruction);
+        return;
     }
 }

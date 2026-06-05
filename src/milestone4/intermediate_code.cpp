@@ -67,6 +67,8 @@ std::optional<OprCode> decodeOprCode(int value) {
         return OprCode::WRT;
     case 14:
         return OprCode::WRTLN;
+    case 15:
+        return OprCode::READLN;
     default:
         return std::nullopt;
     }
@@ -102,6 +104,8 @@ std::string oprCodeToString(OprCode op) {
         return "WRT";
     case OprCode::WRTLN:
         return "WRTLN";
+    case OprCode::READLN:
+        return "READLN";
     }
 
     throw std::invalid_argument("Unknown OPR code value");

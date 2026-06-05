@@ -4,6 +4,9 @@
 #include "parse_tree.h"
 #include "parser.h"
 #include "semantic_analyzer.h"
+#include "milestone4/code_generator.h"
+#include "milestone4/intermediate_code.h"
+#include "milestone4/interpreter.h"
 #include "token.h"
 
 #include <cstdlib>
@@ -150,6 +153,7 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    bool milestone4Ok = true;
     std::ostringstream output;
     output << "----- Decorated AST -----\n\n";
     output << renderAst(semantic.ast);
@@ -159,6 +163,24 @@ int main(int argc, char *argv[]) {
 
     output << "\n----- Semantic Diagnostics -----\n\n";
     output << formatSemanticDiagnostics(semantic.diagnostics);
+
+    if (semantic.ok()) {
+        try {
+            const CodeGeneratorResult generated =
+                generateIntermediateCode(semantic.ast, semantic.symbols);
+            output << "\n----- Intermediate Code -----\n\n";
+            output << renderIntermediateCode(generated.code);
+
+            const InterpreterResult interpreted =
+                runIntermediateCode(generated.code);
+            output << "\n----- Program Output -----\n\n";
+            output << interpreted.output;
+        } catch (const std::exception &e) {
+            milestone4Ok = false;
+            output << "\n----- Milestone 4 Error -----\n\n";
+            output << e.what() << '\n';
+        }
+    }
 
     const std::string outputText = output.str();
 
@@ -184,5 +206,5 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    return semantic.ok() ? EXIT_SUCCESS : EXIT_FAILURE;
+    return semantic.ok() && milestone4Ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

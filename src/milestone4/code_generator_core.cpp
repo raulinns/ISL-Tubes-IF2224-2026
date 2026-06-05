@@ -37,6 +37,35 @@ bool isSimpleRuntimeType(TypeKind type) {
            type == TypeKind::Enum;
 }
 
+bool hasSubprogramDeclarations(const AstNode &node) {
+    if (node.kind != AstKind::Declarations) {
+        return false;
+    }
+
+    for (const AstNode &decl : node.children) {
+        if (decl.kind == AstKind::ProcedureDecl ||
+            decl.kind == AstKind::FunctionDecl) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void allocateParameterStorage(const AstNode &node, CodeGenContext &context) {
+    if (node.kind != AstKind::Parameters) {
+        return;
+    }
+
+    for (const AstNode &param : node.children) {
+        if (param.kind == AstKind::ParameterDecl) {
+            context.allocateRuntimeAddress(param.symbolIndex);
+        }
+    }
+}
+
+void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
+                               CodeGenContext &context);
+
 void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
                           CodeGenContext &context) {
     if (node.kind != AstKind::Declarations) {
@@ -59,10 +88,28 @@ void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
         }
         case AstKind::ProcedureDecl:
         case AstKind::FunctionDecl:
-            unsupportedCodegenNode(decl, "Endra");
+            allocateSubprogramStorage(decl, symbols, context);
+            break;
         default:
             break;
         }
+    }
+}
+
+void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
+                               CodeGenContext &context) {
+    if (decl.kind == AstKind::FunctionDecl) {
+        context.allocateRuntimeAddress(decl.symbolIndex);
+    }
+
+    if (!decl.children.empty()) {
+        allocateParameterStorage(decl.children[0], context);
+    }
+
+    const std::size_t declarationsIndex =
+        decl.kind == AstKind::FunctionDecl ? 2U : 1U;
+    if (decl.children.size() > declarationsIndex) {
+        allocateDeclarations(decl.children[declarationsIndex], symbols, context);
     }
 }
 
@@ -77,7 +124,8 @@ int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
 
     const TabEntry entry =
         entryForSymbol(symbols, node.symbolIndex, "Variable access");
-    if (entry.obj != ObjectKind::Variable && entry.obj != ObjectKind::Parameter) {
+    if (entry.obj != ObjectKind::Variable && entry.obj != ObjectKind::Parameter &&
+        entry.obj != ObjectKind::Function) {
         throw std::runtime_error("Identifier is not stored in runtime memory: " +
                                  node.text);
     }
@@ -87,7 +135,24 @@ int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
     return context.runtimeAddressOf(node.symbolIndex);
 }
 
-void generateDeclarations(const AstNode &node) {
+void generateSubprogramDeclaration(const AstNode &decl, const SymbolTable &symbols,
+                                   CodeGenContext &context) {
+    if (decl.symbolIndex < 0) {
+        throw std::runtime_error("Subprogram declaration is missing symbol index");
+    }
+
+    context.bindSubprogramEntry(decl.symbolIndex, context.nextInstructionIndex());
+
+    const std::size_t bodyIndex = decl.kind == AstKind::FunctionDecl ? 3U : 2U;
+    if (decl.children.size() > bodyIndex) {
+        generateStatement(decl.children[bodyIndex], symbols, context);
+    }
+
+    context.emit(OpCode::RET, 0, 0, "return " + decl.text);
+}
+
+void generateDeclarations(const AstNode &node, const SymbolTable &symbols,
+                          CodeGenContext &context) {
     if (node.kind != AstKind::Declarations) {
         return;
     }
@@ -100,7 +165,8 @@ void generateDeclarations(const AstNode &node) {
             break;
         case AstKind::ProcedureDecl:
         case AstKind::FunctionDecl:
-            unsupportedCodegenNode(decl, "Endra");
+            generateSubprogramDeclaration(decl, symbols, context);
+            break;
         default:
             break;
         }
@@ -262,11 +328,16 @@ void generateProgram(const AstNode &decoratedAst, const SymbolTable &symbols,
         allocateDeclarations(decoratedAst.children[0], symbols, context);
     }
 
+    int mainJump = -1;
+    if (!decoratedAst.children.empty() &&
+        hasSubprogramDeclarations(decoratedAst.children[0])) {
+        mainJump = context.emit(OpCode::JMP, 0, 0, "main entry");
+        generateDeclarations(decoratedAst.children[0], symbols, context);
+        context.patch(mainJump, context.nextInstructionIndex());
+    }
+
     context.emit(OpCode::INT, 0, context.frameSize());
 
-    if (!decoratedAst.children.empty()) {
-        generateDeclarations(decoratedAst.children[0]);
-    }
     if (decoratedAst.children.size() > 1) {
         generateStatement(decoratedAst.children[1], symbols, context);
     }
@@ -309,9 +380,4 @@ void generateStatement(const AstNode &node, const SymbolTable &symbols,
     default:
         unsupportedCodegenNode(node, "Akram/Endra");
     }
-}
-
-void generateCall(const AstNode &node, const SymbolTable &, CodeGenContext &,
-                  bool) {
-    unsupportedCodegenNode(node, "Endra");
 }

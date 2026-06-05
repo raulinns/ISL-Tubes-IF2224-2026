@@ -93,6 +93,8 @@ void SymbolTable::initialize() {
                    true, "false", false);
     insertInternal("readln", ObjectKind::Procedure, TypeKind::None, 0, true, 0,
                    true, "", false);
+    insertInternal("write", ObjectKind::Procedure, TypeKind::None, 0, true, 0,
+                   true, "", false);
     insertInternal("writeln", ObjectKind::Procedure, TypeKind::None, 0, true, 0,
                    true, "", false);
 }

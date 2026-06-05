@@ -5,6 +5,7 @@
 #include "runtime_stack.h"
 
 #include <cstddef>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -39,16 +40,23 @@ class Interpreter {
     void appendOutput(const std::string &text);
     void clearOutput();
 
+    std::istream &input();
+    void setInput(std::istream &input);
+
   private:
     std::vector<Instruction> code_;
     RuntimeStack stack_;
     int instructionPointer_;
     bool halted_;
     std::string output_;
+    std::istream *input_;
 };
 
 InterpreterResult runIntermediateCode(
     const std::vector<Instruction> &code,
+    std::size_t maxFrameCount = RuntimeStack::kDefaultMaxFrameCount);
+InterpreterResult runIntermediateCode(
+    const std::vector<Instruction> &code, std::istream &input,
     std::size_t maxFrameCount = RuntimeStack::kDefaultMaxFrameCount);
 
 void executeInstruction(Interpreter &interpreter, const Instruction &instruction);

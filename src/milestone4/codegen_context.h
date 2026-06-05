@@ -28,12 +28,17 @@ class CodeGenContext {
     void bindRuntimeAddress(int symbolIndex, int runtimeAddress);
     int allocateRuntimeAddress(int symbolIndex);
 
+    bool hasSubprogramEntry(int symbolIndex) const;
+    int subprogramEntryOf(int symbolIndex) const;
+    void bindSubprogramEntry(int symbolIndex, int entryPoint);
+
     const std::vector<Instruction> &code() const;
     std::vector<Instruction> &code();
 
   private:
     std::vector<Instruction> code_;
     std::unordered_map<int, int> runtimeAddressBySymbol_;
+    std::unordered_map<int, int> subprogramEntryBySymbol_;
     int nextRuntimeAddress_;
 };
 

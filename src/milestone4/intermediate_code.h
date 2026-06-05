@@ -32,7 +32,8 @@ enum class OprCode {
     GTR = 11,
     LEQ = 12,
     WRT = 13,
-    WRTLN = 14
+    WRTLN = 14,
+    READLN = 15
 };
 
 struct Instruction {

@@ -2,6 +2,7 @@
 
 #include "arion_runtime_error.h"
 
+#include <iostream>
 #include <stdexcept>
 #include <utility>
 
@@ -56,19 +57,13 @@ void validateJumpTargets(const std::vector<Instruction> &code) {
     }
 }
 
-[[noreturn]] void unsupportedInterpreterInstruction(const Instruction &instruction,
-                                                    const std::string &ownerHint) {
-    throw ArionRuntimeError("Milestone 4 placeholder: interpreter instruction " +
-                            opcodeToString(instruction.op) + " belongs to " +
-                            ownerHint + " integration");
-}
-
 } // namespace
 
 Interpreter::Interpreter() : Interpreter(RuntimeStack::kDefaultMaxFrameCount) {}
 
 Interpreter::Interpreter(std::size_t maxFrameCount)
-    : stack_(maxFrameCount), instructionPointer_(0), halted_(true) {}
+    : stack_(maxFrameCount), instructionPointer_(0), halted_(true),
+      input_(&std::cin) {}
 
 void Interpreter::reset() {
     code_.clear();
@@ -128,9 +123,20 @@ void Interpreter::appendOutput(const std::string &text) { output_ += text; }
 
 void Interpreter::clearOutput() { output_.clear(); }
 
+std::istream &Interpreter::input() { return *input_; }
+
+void Interpreter::setInput(std::istream &input) { input_ = &input; }
+
 InterpreterResult runIntermediateCode(const std::vector<Instruction> &code,
                                       std::size_t maxFrameCount) {
+    return runIntermediateCode(code, std::cin, maxFrameCount);
+}
+
+InterpreterResult runIntermediateCode(const std::vector<Instruction> &code,
+                                      std::istream &input,
+                                      std::size_t maxFrameCount) {
     Interpreter interpreter(maxFrameCount);
+    interpreter.setInput(input);
     interpreter.load(code);
 
     while (!interpreter.isHalted()) {
@@ -165,12 +171,21 @@ void executeInstruction(Interpreter &interpreter,
     }
     case OpCode::RET:
         if (interpreter.stack().hasFrame()) {
-            unsupportedInterpreterInstruction(instruction, "Endra");
+            const StackFrame frame = interpreter.stack().popFrame();
+            interpreter.setInstructionPointer(frame.returnAddress);
+            return;
         }
         interpreter.halt();
         return;
     case OpCode::CAL:
-        unsupportedInterpreterInstruction(instruction, "Endra");
+        if (!interpreter.hasInstruction(instruction.arg)) {
+            throw InvalidJumpTargetError("Invalid call target: " +
+                                         std::to_string(instruction.arg));
+        }
+        interpreter.stack().pushFrame(interpreter.stack().memorySize(), 0, 0,
+                                      interpreter.instructionPointer() + 1, 0);
+        interpreter.setInstructionPointer(instruction.arg);
+        return;
     case OpCode::JMP:
         jumpToInstruction(interpreter, instruction.arg);
         return;
@@ -188,4 +203,3 @@ void executeInstruction(Interpreter &interpreter,
 
     throw ArionRuntimeError("Unknown interpreter opcode");
 }
-

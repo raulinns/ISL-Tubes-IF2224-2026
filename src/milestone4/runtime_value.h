@@ -10,7 +10,13 @@ enum class RuntimeValueKind {
     Real,
     Boolean,
     Char,
-    String
+    String,
+    Address
+};
+
+struct RuntimeAddress {
+    int frameIndex;
+    int offset;
 };
 
 std::string runtimeValueKindToString(RuntimeValueKind kind);
@@ -24,6 +30,7 @@ class RuntimeValue {
     static RuntimeValue makeBoolean(bool value);
     static RuntimeValue makeChar(char value);
     static RuntimeValue makeString(std::string value);
+    static RuntimeValue makeAddress(int frameIndex, int offset);
     static RuntimeValue defaultValue(RuntimeValueKind kind);
     static RuntimeValue parseLiteral(const std::string &text,
                                      const std::string &declaredType = "");
@@ -37,12 +44,14 @@ class RuntimeValue {
     bool asBoolean() const;
     char asChar() const;
     const std::string &asString() const;
+    RuntimeAddress asAddress() const;
 
     std::string toString() const;
 
   private:
     using Storage =
-        std::variant<std::monostate, int, double, bool, char, std::string>;
+        std::variant<std::monostate, int, double, bool, char, std::string,
+                     RuntimeAddress>;
 
     explicit RuntimeValue(Storage storage);
 

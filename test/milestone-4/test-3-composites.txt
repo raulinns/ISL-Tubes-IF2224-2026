@@ -1,0 +1,27 @@
+program Composites;
+
+type
+  Pair == record
+    left: integer;
+    right: integer
+  end;
+  PairArray == array[1..2] of Pair;
+
+var
+  values: PairArray;
+  copied: Pair;
+  i: integer;
+
+procedure printPair(p: Pair);
+begin
+  writeln(p.left, p.right)
+end;
+
+begin
+  i := 2;
+  values[1].left := 10;
+  values[1].right := 20;
+  values[i] := values[1];
+  copied := values[i];
+  printPair(copied)
+end.

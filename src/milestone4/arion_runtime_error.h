@@ -40,4 +40,33 @@ class RuntimeTypeError : public ArionRuntimeError {
         : ArionRuntimeError(message) {}
 };
 
+class BoundsError : public ArionRuntimeError {
+  public:
+    explicit BoundsError(const std::string &message) : ArionRuntimeError(message) {}
+};
+
+class NumericOverflowError : public ArionRuntimeError {
+  public:
+    explicit NumericOverflowError(const std::string &message)
+        : ArionRuntimeError(message) {}
+};
+
+class NumericUnderflowError : public ArionRuntimeError {
+  public:
+    explicit NumericUnderflowError(const std::string &message)
+        : ArionRuntimeError(message) {}
+};
+
+class InvalidMemoryError : public ArionRuntimeError {
+  public:
+    explicit InvalidMemoryError(const std::string &message)
+        : ArionRuntimeError(message) {}
+};
+
+class StackCorruptionError : public ArionRuntimeError {
+  public:
+    explicit StackCorruptionError(const std::string &message)
+        : ArionRuntimeError(message) {}
+};
+
 #endif // ARION_RUNTIME_ERROR_H

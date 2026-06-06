@@ -41,5 +41,6 @@
 *.dwo
 
 /lexer
+/build/
 
 arion

@@ -2,245 +2,204 @@
 
 #include "arion_runtime_error.h"
 
-#include <algorithm>
-#include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <istream>
-#include <stdexcept>
+#include <limits>
 #include <string>
 #include <utility>
 
 namespace {
 
-std::string lowerCopy(std::string text) {
-    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    return text;
-}
-
-std::string operatorHint(const Instruction &instruction) {
-    return lowerCopy(instruction.comment);
-}
-
-RuntimeValue popOperand(Interpreter &interpreter, const std::string &context) {
+RuntimeValue popOperand(Interpreter &interpreter, const std::string &name) {
     try {
         return interpreter.stack().popValue();
     } catch (const StackUnderflowError &) {
-        throw StackUnderflowError("Runtime stack underflow during " + context);
+        throw StackUnderflowError(name + " requires more operands");
     }
 }
 
 std::pair<RuntimeValue, RuntimeValue>
-popBinaryOperands(Interpreter &interpreter, const std::string &context) {
-    RuntimeValue right = popOperand(interpreter, context);
-    RuntimeValue left = popOperand(interpreter, context);
+popBinary(Interpreter &interpreter, const std::string &name) {
+    RuntimeValue right = popOperand(interpreter, name);
+    RuntimeValue left = popOperand(interpreter, name);
     return {std::move(left), std::move(right)};
 }
 
-bool isZero(const RuntimeValue &value) {
-    switch (value.kind()) {
-    case RuntimeValueKind::Integer:
-        return value.asInteger() == 0;
-    case RuntimeValueKind::Real:
-        return value.asReal() == 0.0;
-    default:
-        return false;
+void requireNumeric(const RuntimeValue &left, const RuntimeValue &right,
+                    const std::string &name) {
+    if (!left.isNumeric() || !right.isNumeric()) {
+        throw RuntimeTypeError(name + " requires numeric operands");
     }
 }
 
-bool isNumeric(const RuntimeValue &value) { return value.isNumeric(); }
-
-bool isBoolean(const RuntimeValue &value) {
-    return value.kind() == RuntimeValueKind::Boolean;
-}
-
-bool asBoolean(const RuntimeValue &value, const std::string &context) {
-    if (!isBoolean(value)) {
-        throw RuntimeTypeError(context + " requires boolean operands");
-    }
-    return value.asBoolean();
-}
-
-int asInteger(const RuntimeValue &value, const std::string &context) {
+int requireInteger(const RuntimeValue &value, const std::string &name) {
     if (value.kind() != RuntimeValueKind::Integer) {
-        throw RuntimeTypeError(context + " requires integer operands");
+        throw RuntimeTypeError(name + " requires integer operands");
     }
     return value.asInteger();
 }
 
-RuntimeValue addValues(const RuntimeValue &left, const RuntimeValue &right,
-                       const std::string &hint) {
-    if (hint == "orsy") {
-        return RuntimeValue::makeBoolean(asBoolean(left, "Logical or") ||
-                                         asBoolean(right, "Logical or"));
+bool requireBoolean(const RuntimeValue &value, const std::string &name) {
+    if (value.kind() != RuntimeValueKind::Boolean) {
+        throw RuntimeTypeError(name + " requires boolean operands");
     }
-
-    if (!isNumeric(left) || !isNumeric(right)) {
-        throw RuntimeTypeError("ADD requires numeric operands");
-    }
-    if (left.kind() == RuntimeValueKind::Integer &&
-        right.kind() == RuntimeValueKind::Integer) {
-        return RuntimeValue::makeInteger(left.asInteger() + right.asInteger());
-    }
-    return RuntimeValue::makeReal(left.asReal() + right.asReal());
+    return value.asBoolean();
 }
 
-RuntimeValue subtractValues(const RuntimeValue &left, const RuntimeValue &right) {
-    if (!isNumeric(left) || !isNumeric(right)) {
-        throw RuntimeTypeError("SUB requires numeric operands");
+int checkedInteger(std::int64_t value, const std::string &name) {
+    if (value > std::numeric_limits<int>::max()) {
+        throw NumericOverflowError(name + " integer overflow");
     }
-    if (left.kind() == RuntimeValueKind::Integer &&
-        right.kind() == RuntimeValueKind::Integer) {
-        return RuntimeValue::makeInteger(left.asInteger() - right.asInteger());
+    if (value < std::numeric_limits<int>::min()) {
+        throw NumericUnderflowError(name + " integer underflow");
     }
-    return RuntimeValue::makeReal(left.asReal() - right.asReal());
+    return static_cast<int>(value);
 }
 
-RuntimeValue multiplyValues(const RuntimeValue &left, const RuntimeValue &right,
-                            const std::string &hint) {
-    if (hint == "andsy") {
-        return RuntimeValue::makeBoolean(asBoolean(left, "Logical and") &&
-                                         asBoolean(right, "Logical and"));
+double checkedReal(double value, const std::string &name,
+                   bool unexpectedZero = false) {
+    if (!std::isfinite(value)) {
+        throw NumericOverflowError(name + " real overflow");
     }
-
-    if (!isNumeric(left) || !isNumeric(right)) {
-        throw RuntimeTypeError("MUL requires numeric operands");
+    if (std::fpclassify(value) == FP_SUBNORMAL ||
+        (unexpectedZero && value == 0.0)) {
+        throw NumericUnderflowError(name + " real underflow");
     }
-    if (left.kind() == RuntimeValueKind::Integer &&
-        right.kind() == RuntimeValueKind::Integer) {
-        return RuntimeValue::makeInteger(left.asInteger() * right.asInteger());
-    }
-    return RuntimeValue::makeReal(left.asReal() * right.asReal());
+    return value;
 }
 
-RuntimeValue divideValues(const RuntimeValue &left, const RuntimeValue &right,
-                          const std::string &hint) {
-    if (!isNumeric(left) || !isNumeric(right)) {
-        throw RuntimeTypeError("DIV requires numeric operands");
+RuntimeValue add(const RuntimeValue &left, const RuntimeValue &right) {
+    requireNumeric(left, right, "ADD");
+    if (left.kind() == RuntimeValueKind::Integer &&
+        right.kind() == RuntimeValueKind::Integer) {
+        return RuntimeValue::makeInteger(checkedInteger(
+            static_cast<std::int64_t>(left.asInteger()) + right.asInteger(),
+            "ADD"));
     }
-    if (isZero(right)) {
+    return RuntimeValue::makeReal(
+        checkedReal(left.asReal() + right.asReal(), "ADD"));
+}
+
+RuntimeValue subtract(const RuntimeValue &left, const RuntimeValue &right) {
+    requireNumeric(left, right, "SUB");
+    if (left.kind() == RuntimeValueKind::Integer &&
+        right.kind() == RuntimeValueKind::Integer) {
+        return RuntimeValue::makeInteger(checkedInteger(
+            static_cast<std::int64_t>(left.asInteger()) - right.asInteger(),
+            "SUB"));
+    }
+    return RuntimeValue::makeReal(
+        checkedReal(left.asReal() - right.asReal(), "SUB"));
+}
+
+RuntimeValue multiply(const RuntimeValue &left, const RuntimeValue &right) {
+    requireNumeric(left, right, "MUL");
+    if (left.kind() == RuntimeValueKind::Integer &&
+        right.kind() == RuntimeValueKind::Integer) {
+        return RuntimeValue::makeInteger(checkedInteger(
+            static_cast<std::int64_t>(left.asInteger()) * right.asInteger(),
+            "MUL"));
+    }
+    const double lhs = left.asReal();
+    const double rhs = right.asReal();
+    return RuntimeValue::makeReal(
+        checkedReal(lhs * rhs, "MUL", lhs != 0.0 && rhs != 0.0));
+}
+
+RuntimeValue realDivide(const RuntimeValue &left, const RuntimeValue &right) {
+    requireNumeric(left, right, "DIV");
+    const double divisor = right.asReal();
+    if (divisor == 0.0) {
         throw DivisionByZeroError("Division by zero");
     }
-    if (hint == "idiv") {
-        return RuntimeValue::makeInteger(asInteger(left, "Integer division") /
-                                         asInteger(right, "Integer division"));
-    }
-    if (hint == "rdiv") {
-        return RuntimeValue::makeReal(left.asReal() / right.asReal());
-    }
-    if (left.kind() == RuntimeValueKind::Integer &&
-        right.kind() == RuntimeValueKind::Integer) {
-        return RuntimeValue::makeInteger(left.asInteger() / right.asInteger());
-    }
-    return RuntimeValue::makeReal(left.asReal() / right.asReal());
+    const double dividend = left.asReal();
+    return RuntimeValue::makeReal(checkedReal(
+        dividend / divisor, "DIV", dividend != 0.0));
 }
 
-RuntimeValue moduloValues(const RuntimeValue &left, const RuntimeValue &right) {
-    const int divisor = asInteger(right, "Modulo");
+RuntimeValue integerDivide(const RuntimeValue &left,
+                           const RuntimeValue &right) {
+    const int dividend = requireInteger(left, "IDIV");
+    const int divisor = requireInteger(right, "IDIV");
+    if (divisor == 0) {
+        throw DivisionByZeroError("Integer division by zero");
+    }
+    if (dividend == std::numeric_limits<int>::min() && divisor == -1) {
+        throw NumericOverflowError("IDIV integer overflow");
+    }
+    return RuntimeValue::makeInteger(dividend / divisor);
+}
+
+RuntimeValue modulo(const RuntimeValue &left, const RuntimeValue &right) {
+    const int dividend = requireInteger(left, "MOD");
+    const int divisor = requireInteger(right, "MOD");
     if (divisor == 0) {
         throw DivisionByZeroError("Modulo by zero");
     }
-    return RuntimeValue::makeInteger(asInteger(left, "Modulo") % divisor);
+    if (dividend == std::numeric_limits<int>::min() && divisor == -1) {
+        return RuntimeValue::makeInteger(0);
+    }
+    return RuntimeValue::makeInteger(dividend % divisor);
 }
 
-RuntimeValue inputValueFromToken(const std::string &token,
-                                 const std::string &declaredType) {
-    const std::string type = lowerCopy(declaredType);
-    if (type == "string") {
-        return RuntimeValue::makeString(token);
+int compare(const RuntimeValue &left, const RuntimeValue &right,
+            const std::string &name) {
+    if (left.isNumeric() && right.isNumeric()) {
+        const double lhs = left.asReal();
+        const double rhs = right.asReal();
+        return lhs < rhs ? -1 : (lhs > rhs ? 1 : 0);
     }
-    if (type == "char" && token.size() == 1U) {
-        return RuntimeValue::makeChar(token[0]);
+    if (left.kind() != right.kind()) {
+        throw RuntimeTypeError(name + " requires compatible operands");
     }
-    return RuntimeValue::parseLiteral(token, declaredType);
+    switch (left.kind()) {
+    case RuntimeValueKind::Boolean:
+        return left.asBoolean() == right.asBoolean()
+                   ? 0
+                   : (left.asBoolean() ? 1 : -1);
+    case RuntimeValueKind::Char:
+        return left.asChar() < right.asChar()
+                   ? -1
+                   : (left.asChar() > right.asChar() ? 1 : 0);
+    case RuntimeValueKind::String:
+        return left.asString() < right.asString()
+                   ? -1
+                   : (left.asString() > right.asString() ? 1 : 0);
+    default:
+        throw RuntimeTypeError(name + " does not accept this operand type");
+    }
 }
 
-int readlnTargetOffset(const Instruction &instruction) {
-    const std::string hint = operatorHint(instruction);
-    const std::size_t space = hint.find(' ');
-    if (space == std::string::npos || space + 1 >= hint.size()) {
-        throw ArionRuntimeError("READLN instruction is missing target offset");
-    }
-    return std::stoi(hint.substr(space + 1));
-}
-
-void executeReadln(Interpreter &interpreter, const Instruction &instruction) {
+RuntimeValue readValue(Interpreter &interpreter, int typeCode) {
     std::string token;
     if (!(interpreter.input() >> token)) {
         throw ArionRuntimeError("readln expected an input value");
     }
-
     try {
-        interpreter.stack().writeAt(instruction.level,
-                                    readlnTargetOffset(instruction),
-                                    inputValueFromToken(token, instruction.literalText));
-    } catch (const std::exception &e) {
-        throw RuntimeTypeError("readln cannot parse input '" + token +
-                               "' as " + instruction.literalText + ": " +
-                               e.what());
-    }
-
-    interpreter.advance();
-}
-
-int compareValues(const RuntimeValue &left, const RuntimeValue &right,
-                  const std::string &context) {
-    if (isNumeric(left) && isNumeric(right)) {
-        const double lhs = left.asReal();
-        const double rhs = right.asReal();
-        if (lhs < rhs) {
-            return -1;
+        switch (typeCode) {
+        case 1:
+            return RuntimeValue::parseLiteral(token, "integer");
+        case 2:
+            return RuntimeValue::parseLiteral(token, "real");
+        case 3:
+            return RuntimeValue::parseLiteral(token, "boolean");
+        case 4:
+            if (token.size() != 1) {
+                throw std::invalid_argument("char input must have length one");
+            }
+            return RuntimeValue::makeChar(token[0]);
+        case 5:
+            return RuntimeValue::makeString(token);
+        default:
+            throw RuntimeTypeError("READLN has unsupported type code");
         }
-        if (lhs > rhs) {
-            return 1;
-        }
-        return 0;
+    } catch (const ArionRuntimeError &) {
+        throw;
+    } catch (const std::exception &error) {
+        throw RuntimeTypeError("readln input '" + token +
+                               "' has invalid type: " + error.what());
     }
-
-    if (left.kind() != right.kind()) {
-        throw RuntimeTypeError(context + " requires compatible operand types");
-    }
-
-    switch (left.kind()) {
-    case RuntimeValueKind::Boolean: {
-        const bool lhs = left.asBoolean();
-        const bool rhs = right.asBoolean();
-        if (lhs == rhs) {
-            return 0;
-        }
-        return lhs ? 1 : -1;
-    }
-    case RuntimeValueKind::Char: {
-        const char lhs = left.asChar();
-        const char rhs = right.asChar();
-        if (lhs < rhs) {
-            return -1;
-        }
-        if (lhs > rhs) {
-            return 1;
-        }
-        return 0;
-    }
-    case RuntimeValueKind::String: {
-        const std::string &lhs = left.asString();
-        const std::string &rhs = right.asString();
-        if (lhs < rhs) {
-            return -1;
-        }
-        if (lhs > rhs) {
-            return 1;
-        }
-        return 0;
-    }
-    case RuntimeValueKind::Integer:
-    case RuntimeValueKind::Real:
-        break;
-    case RuntimeValueKind::Uninitialized:
-        throw RuntimeTypeError(context + " does not accept uninitialized values");
-    }
-
-    throw RuntimeTypeError(context + " requires comparable operands");
 }
 
 } // namespace
@@ -248,119 +207,108 @@ int compareValues(const RuntimeValue &left, const RuntimeValue &right,
 void executeOprInstruction(Interpreter &interpreter,
                            const Instruction &instruction) {
     const std::optional<OprCode> decoded = decodeOprCode(instruction.arg);
-    if (!decoded.has_value()) {
-        throw ArionRuntimeError("Unknown OPR code: " +
+    if (!decoded) {
+        throw ArionRuntimeError("Unknown OPR code " +
                                 std::to_string(instruction.arg));
     }
-
-    const std::string hint = operatorHint(instruction);
-
+    RuntimeStack &stack = interpreter.stack();
     switch (*decoded) {
     case OprCode::NEG: {
-        const RuntimeValue operand = popOperand(interpreter, "NEG");
-        if (operand.kind() == RuntimeValueKind::Integer) {
-            interpreter.stack().pushValue(
-                RuntimeValue::makeInteger(-operand.asInteger()));
-        } else if (operand.kind() == RuntimeValueKind::Real) {
-            interpreter.stack().pushValue(RuntimeValue::makeReal(-operand.asReal()));
+        const RuntimeValue value = popOperand(interpreter, "NEG");
+        if (value.kind() == RuntimeValueKind::Integer) {
+            stack.pushValue(RuntimeValue::makeInteger(checkedInteger(
+                -static_cast<std::int64_t>(value.asInteger()), "NEG")));
+        } else if (value.kind() == RuntimeValueKind::Real) {
+            stack.pushValue(
+                RuntimeValue::makeReal(checkedReal(-value.asReal(), "NEG")));
         } else {
-            throw RuntimeTypeError("NEG requires numeric operand");
+            throw RuntimeTypeError("NEG requires a numeric operand");
         }
-        interpreter.advance();
-        return;
+        break;
     }
     case OprCode::ADD: {
-        const auto [left, right] = popBinaryOperands(interpreter, "ADD");
-        interpreter.stack().pushValue(addValues(left, right, hint));
-        interpreter.advance();
-        return;
+        const auto [left, right] = popBinary(interpreter, "ADD");
+        stack.pushValue(add(left, right));
+        break;
     }
     case OprCode::SUB: {
-        const auto [left, right] = popBinaryOperands(interpreter, "SUB");
-        interpreter.stack().pushValue(subtractValues(left, right));
-        interpreter.advance();
-        return;
+        const auto [left, right] = popBinary(interpreter, "SUB");
+        stack.pushValue(subtract(left, right));
+        break;
     }
     case OprCode::MUL: {
-        const auto [left, right] = popBinaryOperands(interpreter, "MUL");
-        interpreter.stack().pushValue(multiplyValues(left, right, hint));
-        interpreter.advance();
-        return;
+        const auto [left, right] = popBinary(interpreter, "MUL");
+        stack.pushValue(multiply(left, right));
+        break;
     }
     case OprCode::DIV: {
-        const auto [left, right] = popBinaryOperands(interpreter, "DIV");
-        interpreter.stack().pushValue(divideValues(left, right, hint));
-        interpreter.advance();
-        return;
+        const auto [left, right] = popBinary(interpreter, "DIV");
+        stack.pushValue(realDivide(left, right));
+        break;
+    }
+    case OprCode::IDIV: {
+        const auto [left, right] = popBinary(interpreter, "IDIV");
+        stack.pushValue(integerDivide(left, right));
+        break;
     }
     case OprCode::MOD: {
-        const auto [left, right] = popBinaryOperands(interpreter, "MOD");
-        interpreter.stack().pushValue(moduloValues(left, right));
-        interpreter.advance();
-        return;
+        const auto [left, right] = popBinary(interpreter, "MOD");
+        stack.pushValue(modulo(left, right));
+        break;
     }
-    case OprCode::EQL: {
-        const auto [left, right] = popBinaryOperands(interpreter, "EQL");
-        interpreter.stack().pushValue(
-            RuntimeValue::makeBoolean(compareValues(left, right, "EQL") == 0));
-        interpreter.advance();
-        return;
+    case OprCode::AND: {
+        const auto [left, right] = popBinary(interpreter, "AND");
+        stack.pushValue(RuntimeValue::makeBoolean(
+            requireBoolean(left, "AND") && requireBoolean(right, "AND")));
+        break;
     }
-    case OprCode::NEQ: {
-        const auto [left, right] = popBinaryOperands(interpreter, "NEQ");
-        interpreter.stack().pushValue(
-            RuntimeValue::makeBoolean(compareValues(left, right, "NEQ") != 0));
-        interpreter.advance();
-        return;
+    case OprCode::OR: {
+        const auto [left, right] = popBinary(interpreter, "OR");
+        stack.pushValue(RuntimeValue::makeBoolean(
+            requireBoolean(left, "OR") || requireBoolean(right, "OR")));
+        break;
     }
-    case OprCode::LSS: {
-        const auto [left, right] = popBinaryOperands(interpreter, "LSS");
-        interpreter.stack().pushValue(
-            RuntimeValue::makeBoolean(compareValues(left, right, "LSS") < 0));
-        interpreter.advance();
-        return;
-    }
-    case OprCode::GEQ: {
-        const auto [left, right] = popBinaryOperands(interpreter, "GEQ");
-        interpreter.stack().pushValue(
-            RuntimeValue::makeBoolean(compareValues(left, right, "GEQ") >= 0));
-        interpreter.advance();
-        return;
-    }
-    case OprCode::GTR: {
-        const auto [left, right] = popBinaryOperands(interpreter, "GTR");
-        interpreter.stack().pushValue(
-            RuntimeValue::makeBoolean(compareValues(left, right, "GTR") > 0));
-        interpreter.advance();
-        return;
-    }
+    case OprCode::NOT:
+        stack.pushValue(RuntimeValue::makeBoolean(
+            !requireBoolean(popOperand(interpreter, "NOT"), "NOT")));
+        break;
+    case OprCode::EQL:
+    case OprCode::NEQ:
+    case OprCode::LSS:
+    case OprCode::GEQ:
+    case OprCode::GTR:
     case OprCode::LEQ: {
-        const auto [left, right] = popBinaryOperands(interpreter, "LEQ");
-        interpreter.stack().pushValue(
-            RuntimeValue::makeBoolean(compareValues(left, right, "LEQ") <= 0));
-        interpreter.advance();
-        return;
+        const auto [left, right] =
+            popBinary(interpreter, oprCodeToString(*decoded));
+        const int result = compare(left, right, oprCodeToString(*decoded));
+        bool value = false;
+        if (*decoded == OprCode::EQL) value = result == 0;
+        if (*decoded == OprCode::NEQ) value = result != 0;
+        if (*decoded == OprCode::LSS) value = result < 0;
+        if (*decoded == OprCode::GEQ) value = result >= 0;
+        if (*decoded == OprCode::GTR) value = result > 0;
+        if (*decoded == OprCode::LEQ) value = result <= 0;
+        stack.pushValue(RuntimeValue::makeBoolean(value));
+        break;
     }
     case OprCode::WRT:
-    case OprCode::WRTLN: {
-        if (*decoded == OprCode::WRTLN && hint == "writeln empty") {
-            interpreter.appendOutput("\n");
-            interpreter.advance();
-            return;
+        interpreter.appendOutput(popOperand(interpreter, "WRT").toString());
+        break;
+    case OprCode::WRTLN:
+        if (instruction.extraArgs.empty() || instruction.extraArgs[0] == 0) {
+            interpreter.appendOutput(
+                popOperand(interpreter, "WRTLN").toString());
         }
-
-        const RuntimeValue value =
-            popOperand(interpreter,
-                       *decoded == OprCode::WRT ? "WRT" : "WRTLN");
-        interpreter.appendOutput(value.toString());
-        if (*decoded == OprCode::WRTLN) {
-            interpreter.appendOutput("\n");
-        }
-        interpreter.advance();
-        return;
+        interpreter.appendOutput("\n");
+        break;
+    case OprCode::READLN: {
+        const RuntimeAddress address =
+            popOperand(interpreter, "READLN").asAddress();
+        const int typeCode =
+            instruction.extraArgs.empty() ? 0 : instruction.extraArgs[0];
+        stack.writeAddress(address, readValue(interpreter, typeCode));
+        break;
     }
-    case OprCode::READLN:
-        executeReadln(interpreter, instruction);
-        return;
     }
+    interpreter.advance();
 }

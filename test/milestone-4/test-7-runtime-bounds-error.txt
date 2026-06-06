@@ -1,0 +1,10 @@
+program RuntimeBounds;
+
+var
+  values: array[1..2] of integer;
+  index: integer;
+
+begin
+  index := 3;
+  values[index] := 1
+end.

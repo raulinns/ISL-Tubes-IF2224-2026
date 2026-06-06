@@ -1,0 +1,10 @@
+program ZeroArgumentCall;
+
+procedure ping;
+begin
+  writeln(1)
+end;
+
+begin
+  ping
+end.

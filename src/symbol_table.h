@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+struct AstNode;
+
 enum class ObjectKind {
     None,
     Reserved,
@@ -44,6 +46,7 @@ struct TabEntry {
     ObjectKind obj;
     TypeKind type;
     int ref;
+    int typeRef;
     bool nrm;
     int lev;
     int adr;
@@ -97,6 +100,9 @@ class SymbolTable {
     const TabEntry &tabEntry(int index) const;
     const BTabEntry &btabEntry(int index) const;
     const ATabEntry &atabEntry(int index) const;
+    TabEntry &mutableTabEntry(int index);
+    BTabEntry &mutableBtabEntry(int index);
+    ATabEntry &mutableAtabEntry(int index);
 
     const std::vector<TabEntry> &tab() const;
     const std::vector<BTabEntry> &btab() const;
@@ -131,5 +137,7 @@ std::string typeKindToString(TypeKind kind);
 TypeKind typeKindFromString(const std::string &name);
 std::string blockKindToString(BlockKind kind);
 BlockKind blockKindFromString(const std::string &name);
+int runtimeTypeSize(TypeKind type, int ref, const SymbolTable &symbols);
+void normalizeRuntimeLayout(const AstNode &ast, SymbolTable &symbols);
 
 #endif // SYMBOL_TABLE_H

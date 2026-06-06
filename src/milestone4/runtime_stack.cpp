@@ -9,207 +9,195 @@ RuntimeStack::RuntimeStack()
     : RuntimeStack(RuntimeStack::kDefaultMaxFrameCount) {}
 
 RuntimeStack::RuntimeStack(std::size_t maxFrameCount)
-    : maxFrameCount_(maxFrameCount), topLevelFloor_(0) {
-    if (maxFrameCount_ == 0U) {
-        throw std::invalid_argument("RuntimeStack maxFrameCount must be positive");
+    : maxFrameCount_(maxFrameCount) {
+    if (maxFrameCount == 0) {
+        throw std::invalid_argument("Maximum frame count must be positive");
     }
 }
 
 void RuntimeStack::reset() {
-    memory_.clear();
     frames_.clear();
-    topLevelFloor_ = 0;
+    operands_.clear();
 }
 
 void RuntimeStack::reserveSlots(int slotCount) {
-    if (slotCount < 0) {
-        throw std::invalid_argument("RuntimeStack slot count cannot be negative");
+    if (slotCount < kFrameHeaderSize) {
+        throw StackCorruptionError("INT frame size is smaller than frame header");
     }
-
     if (frames_.empty()) {
-        topLevelFloor_ = slotCount;
-        resizeToAtLeast(slotCount);
+        frames_.push_back(
+            {0, -1, -1, -1, slotCount, 0,
+             std::vector<RuntimeValue>(static_cast<std::size_t>(slotCount))});
         return;
     }
-
     StackFrame &frame = frames_.back();
-    if (slotCount <= frame.slotCount) {
-        frame.slotCount = slotCount;
-        return;
+    if (frame.slotCount != 0) {
+        throw StackCorruptionError("Activation frame executes INT more than once");
     }
-
-    const int oldFloor = currentFloor();
-    const int addedSlots = slotCount - frame.slotCount;
-    memory_.insert(memory_.begin() + oldFloor, static_cast<std::size_t>(addedSlots),
-                   RuntimeValue());
     frame.slotCount = slotCount;
+    frame.slots.resize(static_cast<std::size_t>(slotCount));
 }
 
-int RuntimeStack::allocateSlot() {
-    const int address = currentFloor();
-
+int RuntimeStack::frameIndexAtDifference(int levelDifference) const {
     if (frames_.empty()) {
-        ++topLevelFloor_;
-        resizeToAtLeast(topLevelFloor_);
-    } else {
-        ++frames_.back().slotCount;
-        resizeToAtLeast(currentFloor());
+        throw StackUnderflowError("No activation frame is active");
     }
+    if (levelDifference < 0) {
+        throw InvalidMemoryError("Negative lexical-level difference");
+    }
+    int index = static_cast<int>(frames_.size()) - 1;
+    for (int i = 0; i < levelDifference; ++i) {
+        index = frames_[static_cast<std::size_t>(index)].staticLink;
+        if (index < 0 || index >= static_cast<int>(frames_.size())) {
+            throw StackCorruptionError("Broken static link");
+        }
+    }
+    return index;
+}
 
+RuntimeAddress RuntimeStack::resolveAddress(int levelDifference,
+                                            int offset) const {
+    const RuntimeAddress address{frameIndexAtDifference(levelDifference), offset};
+    validateAddress(address);
     return address;
 }
 
-bool RuntimeStack::hasAddress(int address) const {
-    return address >= 0 && address < currentFloor();
+const RuntimeValue &RuntimeStack::readAt(int levelDifference, int offset) const {
+    return readAddress(resolveAddress(levelDifference, offset));
 }
 
-const RuntimeValue &RuntimeStack::readAt(int address) const {
+void RuntimeStack::writeAt(int levelDifference, int offset,
+                           const RuntimeValue &value) {
+    writeAddress(resolveAddress(levelDifference, offset), value);
+}
+
+const RuntimeValue &
+RuntimeStack::readAddress(const RuntimeAddress &address) const {
     validateAddress(address);
-    return memory_[static_cast<std::size_t>(address)];
-}
-
-RuntimeValue &RuntimeStack::readAt(int address) {
-    validateAddress(address);
-    return memory_[static_cast<std::size_t>(address)];
-}
-
-void RuntimeStack::writeAt(int address, const RuntimeValue &value) {
-    validateAddress(address);
-    memory_[static_cast<std::size_t>(address)] = value;
-}
-
-int RuntimeStack::resolveAddress(int level, int address) const {
-    if (level == 0) {
-        return address;
+    const RuntimeValue &value =
+        frames_[static_cast<std::size_t>(address.frameIndex)]
+            .slots[static_cast<std::size_t>(address.offset)];
+    if (!value.isInitialized()) {
+        throw InvalidMemoryError("Read from uninitialized runtime slot");
     }
-    if (level == 1) {
-        if (frames_.empty()) {
-            throw ArionRuntimeError(
-                "Frame-relative address access requires an active stack frame");
-        }
-        return frames_.back().baseAddress + address;
+    return value;
+}
+
+void RuntimeStack::writeAddress(const RuntimeAddress &address,
+                                const RuntimeValue &value) {
+    validateAddress(address);
+    frames_[static_cast<std::size_t>(address.frameIndex)]
+        .slots[static_cast<std::size_t>(address.offset)] = value;
+}
+
+std::vector<RuntimeValue>
+RuntimeStack::readBlock(const RuntimeAddress &address, int size) const {
+    if (size < 0) {
+        throw InvalidMemoryError("Negative block size");
     }
-    throw ArionRuntimeError("Unsupported runtime address mode: " +
-                            std::to_string(level));
+    std::vector<RuntimeValue> values;
+    values.reserve(static_cast<std::size_t>(size));
+    for (int i = 0; i < size; ++i) {
+        values.push_back(
+            readAddress({address.frameIndex, address.offset + i}));
+    }
+    return values;
 }
 
-const RuntimeValue &RuntimeStack::readAt(int level, int address) const {
-    return readAt(resolveAddress(level, address));
-}
-
-void RuntimeStack::writeAt(int level, int address, const RuntimeValue &value) {
-    writeAt(resolveAddress(level, address), value);
+void RuntimeStack::writeBlock(const RuntimeAddress &address,
+                              const std::vector<RuntimeValue> &values) {
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        writeAddress({address.frameIndex,
+                      address.offset + static_cast<int>(i)},
+                     values[i]);
+    }
 }
 
 void RuntimeStack::pushValue(const RuntimeValue &value) {
-    memory_.push_back(value);
+    operands_.push_back(value);
 }
 
 RuntimeValue RuntimeStack::popValue() {
-    if (memory_.size() <= static_cast<std::size_t>(currentFloor())) {
-        throw StackUnderflowError(
-            "Runtime stack underflow while popping an evaluation value");
+    if (operands_.empty()) {
+        throw StackUnderflowError("Operand stack underflow");
     }
-
-    RuntimeValue value = memory_.back();
-    memory_.pop_back();
+    RuntimeValue value = operands_.back();
+    operands_.pop_back();
     return value;
 }
 
 const RuntimeValue &RuntimeStack::peekValue(std::size_t depth) const {
-    const std::size_t availableValues =
-        memory_.size() - static_cast<std::size_t>(currentFloor());
-    if (depth >= availableValues) {
-        throw StackUnderflowError(
-            "Runtime stack underflow while peeking an evaluation value");
+    if (depth >= operands_.size()) {
+        throw StackUnderflowError("Operand stack underflow");
     }
-
-    return memory_[memory_.size() - 1U - depth];
+    return operands_[operands_.size() - depth - 1];
 }
 
-void RuntimeStack::pushFrame(const StackFrame &frame) {
-    pushFrame(frame.baseAddress, frame.staticLink, frame.dynamicLink,
-              frame.returnAddress, frame.slotCount);
-}
+std::size_t RuntimeStack::operandDepth() const { return operands_.size(); }
 
-void RuntimeStack::pushFrame(int baseAddress, int staticLink, int dynamicLink,
-                             int returnAddress, int slotCount) {
+void RuntimeStack::pushCallFrame(int lexicalDifference, int returnAddress,
+                                 int argumentSlotCount) {
     if (frames_.size() >= maxFrameCount_) {
-        throw StackOverflowError(
-            "Runtime stack frame limit exceeded while pushing a new frame");
+        throw StackOverflowError("Activation frame limit exceeded");
     }
-    if (baseAddress < 0 || slotCount < 0) {
-        throw std::invalid_argument(
-            "Stack frame base address and slot count must be non-negative");
+    if (argumentSlotCount < 0 ||
+        static_cast<std::size_t>(argumentSlotCount) > operands_.size()) {
+        throw StackCorruptionError("CAL argument-slot count exceeds operand stack");
     }
-    if (baseAddress < currentFloor()) {
-        throw ArionRuntimeError(
-            "Stack frame base address overlaps existing allocated memory");
-    }
-
+    const int staticParent = frameIndexAtDifference(lexicalDifference);
+    const int dynamicParent = static_cast<int>(frames_.size()) - 1;
+    const int lexicalLevel =
+        frames_[static_cast<std::size_t>(staticParent)].lexicalLevel + 1;
     frames_.push_back(
-        StackFrame{baseAddress, staticLink, dynamicLink, returnAddress,
-                   slotCount});
-    resizeToAtLeast(currentFloor());
+        {lexicalLevel, staticParent, dynamicParent, returnAddress, 0,
+         operands_.size() - static_cast<std::size_t>(argumentSlotCount), {}});
 }
 
 StackFrame RuntimeStack::popFrame() {
-    if (frames_.empty()) {
-        throw StackUnderflowError(
-            "Runtime stack underflow while popping a stack frame");
+    if (frames_.size() <= 1) {
+        throw StackUnderflowError("Cannot pop the global activation frame");
     }
-
     const StackFrame frame = frames_.back();
+    if (frame.dynamicLink != static_cast<int>(frames_.size()) - 2) {
+        throw StackCorruptionError("Broken dynamic link");
+    }
     frames_.pop_back();
-    memory_.resize(static_cast<std::size_t>(frame.baseAddress));
     return frame;
 }
 
 bool RuntimeStack::hasFrame() const { return !frames_.empty(); }
 
+bool RuntimeStack::hasCallerFrame() const { return frames_.size() > 1; }
+
 const StackFrame &RuntimeStack::currentFrame() const {
     if (frames_.empty()) {
-        throw StackUnderflowError("Runtime stack does not have an active frame");
+        throw StackUnderflowError("No activation frame is active");
     }
     return frames_.back();
 }
-
-int RuntimeStack::currentBaseAddress() const {
-    return frames_.empty() ? 0 : frames_.back().baseAddress;
-}
-
-int RuntimeStack::currentFloorAddress() const { return currentFloor(); }
 
 std::size_t RuntimeStack::frameCount() const { return frames_.size(); }
 
 std::size_t RuntimeStack::maxFrameCount() const { return maxFrameCount_; }
 
-int RuntimeStack::memorySize() const {
-    return static_cast<int>(memory_.size());
+std::size_t RuntimeStack::currentOperandBase() const {
+    return currentFrame().operandBase;
 }
 
-const std::vector<RuntimeValue> &RuntimeStack::memory() const { return memory_; }
-
-int RuntimeStack::currentFloor() const {
-    if (frames_.empty()) {
-        return topLevelFloor_;
-    }
-    return frames_.back().baseAddress + frames_.back().slotCount;
+int RuntimeStack::currentReturnAddress() const {
+    return currentFrame().returnAddress;
 }
 
-void RuntimeStack::resizeToAtLeast(int slotCount) {
-    if (slotCount < 0) {
-        throw std::invalid_argument("RuntimeStack size cannot be negative");
+void RuntimeStack::validateAddress(const RuntimeAddress &address) const {
+    if (address.frameIndex < 0 ||
+        address.frameIndex >= static_cast<int>(frames_.size())) {
+        throw InvalidMemoryError("Address references an inactive frame");
     }
-
-    if (memory_.size() < static_cast<std::size_t>(slotCount)) {
-        memory_.resize(static_cast<std::size_t>(slotCount));
-    }
-}
-
-void RuntimeStack::validateAddress(int address) const {
-    if (!hasAddress(address)) {
-        throw ArionRuntimeError("Invalid runtime address access: " +
-                                std::to_string(address));
+    const StackFrame &frame =
+        frames_[static_cast<std::size_t>(address.frameIndex)];
+    if (address.offset < kFrameHeaderSize || address.offset >= frame.slotCount) {
+        throw InvalidMemoryError(
+            "Runtime address is outside writable frame slots: " +
+            std::to_string(address.offset));
     }
 }

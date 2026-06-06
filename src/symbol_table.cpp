@@ -1,4 +1,5 @@
 #include "symbol_table.h"
+#include "ast.h"
 
 #include <algorithm>
 #include <cctype>
@@ -13,15 +14,14 @@ namespace {
 TabEntry makeEntry(const std::string &identifier, int link, ObjectKind obj,
                    TypeKind type, int ref, bool nrm, int lev, int adr,
                    bool initialized, const std::string &literalValue) {
-    return {identifier, link, obj, type, ref, nrm, lev, adr, initialized,
+    return {identifier, link, obj, type, ref, ref, nrm, lev, adr, initialized,
             literalValue};
 }
 
-int typeSize(TypeKind type) {
+int primitiveTypeSize(TypeKind type) {
     switch (type) {
-    case TypeKind::Real:
-        return 2;
     case TypeKind::Integer:
+    case TypeKind::Real:
     case TypeKind::Char:
     case TypeKind::Boolean:
     case TypeKind::String:
@@ -184,11 +184,19 @@ int SymbolTable::insertInternal(const std::string &name, ObjectKind obj,
 
     if (obj == ObjectKind::Variable || obj == ObjectKind::Parameter ||
         obj == ObjectKind::Field) {
+        int size = primitiveTypeSize(type);
+        if (type == TypeKind::Array && ref >= 0 &&
+            ref < static_cast<int>(atab_.size())) {
+            size = atab_[static_cast<std::size_t>(ref)].size;
+        } else if (type == TypeKind::Record && ref >= 0 &&
+                   ref < static_cast<int>(btab_.size())) {
+            size = btab_[static_cast<std::size_t>(ref)].vsze;
+        }
         if (obj == ObjectKind::Parameter) {
-            btab_[blockIndex].psze += typeSize(type);
+            btab_[blockIndex].psze += size;
             btab_[blockIndex].lpar = index;
         } else {
-            btab_[blockIndex].vsze += typeSize(type);
+            btab_[blockIndex].vsze += size;
         }
     }
 
@@ -289,6 +297,27 @@ const ATabEntry &SymbolTable::atabEntry(int index) const {
     return atab_[index];
 }
 
+TabEntry &SymbolTable::mutableTabEntry(int index) {
+    if (index < 0 || index >= static_cast<int>(tab_.size())) {
+        throw std::out_of_range("tab index out of range");
+    }
+    return tab_[index];
+}
+
+BTabEntry &SymbolTable::mutableBtabEntry(int index) {
+    if (index < 0 || index >= static_cast<int>(btab_.size())) {
+        throw std::out_of_range("btab index out of range");
+    }
+    return btab_[index];
+}
+
+ATabEntry &SymbolTable::mutableAtabEntry(int index) {
+    if (index < 0 || index >= static_cast<int>(atab_.size())) {
+        throw std::out_of_range("atab index out of range");
+    }
+    return atab_[index];
+}
+
 const std::vector<TabEntry> &SymbolTable::tab() const { return tab_; }
 
 const std::vector<BTabEntry> &SymbolTable::btab() const { return btab_; }
@@ -298,14 +327,15 @@ const std::vector<ATabEntry> &SymbolTable::atab() const { return atab_; }
 std::string SymbolTable::renderTab() const {
     std::ostringstream out;
     out << "tab\n";
-    appendTableDivider(out, 94);
+    appendTableDivider(out, 100);
     out << std::left << std::setw(5) << "idx" << std::setw(18) << "identifier"
         << std::setw(12) << "obj" << std::setw(10) << "type" << std::setw(6)
-        << "ref" << std::setw(6) << "nrm" << std::setw(6) << "lev"
+        << "ref" << std::setw(6) << "tref" << std::setw(6) << "nrm"
+        << std::setw(6) << "lev"
         << std::setw(6) << "adr" << std::setw(6) << "link" << std::setw(7)
         << "init" << "value"
         << "\n";
-    appendTableDivider(out, 94);
+    appendTableDivider(out, 100);
 
     for (std::size_t i = 0; i < tab_.size(); ++i) {
         const TabEntry &entry = tab_[i];
@@ -313,7 +343,8 @@ std::string SymbolTable::renderTab() const {
             << entry.identifier << std::setw(12)
             << objectKindToString(entry.obj) << std::setw(10)
             << typeKindToString(entry.type) << std::setw(6) << entry.ref
-            << std::setw(6) << (entry.nrm ? 1 : 0) << std::setw(6)
+            << std::setw(6) << entry.typeRef << std::setw(6)
+            << (entry.nrm ? 1 : 0) << std::setw(6)
             << entry.lev << std::setw(6) << entry.adr << std::setw(6)
             << entry.link << std::setw(7) << (entry.initialized ? 1 : 0)
             << entry.literalValue << "\n";
@@ -397,6 +428,7 @@ void SymbolTable::loadRenderedAll(const std::string &text) {
     if (index >= lines.size()) {
         throw std::runtime_error("Missing tab header row");
     }
+    const bool hasTypeRef = lines[index].find("tref") != std::string::npos;
     ++index;
     skipDivider();
 
@@ -417,13 +449,18 @@ void SymbolTable::loadRenderedAll(const std::string &text) {
         entry.obj = objectKindFromString(sliceColumn(line, 23, 12));
         entry.type = typeKindFromString(sliceColumn(line, 35, 10));
         entry.ref = parseIntColumn(line, 45, 6);
-        entry.nrm = parseBoolColumn(line, 51, 6);
-        entry.lev = parseIntColumn(line, 57, 6);
-        entry.adr = parseIntColumn(line, 63, 6);
-        entry.link = parseIntColumn(line, 69, 6);
-        entry.initialized = parseBoolColumn(line, 75, 7);
+        entry.typeRef =
+            hasTypeRef ? parseIntColumn(line, 51, 6) : entry.ref;
+        const std::size_t shift = hasTypeRef ? 6U : 0U;
+        entry.nrm = parseBoolColumn(line, 51 + shift, 6);
+        entry.lev = parseIntColumn(line, 57 + shift, 6);
+        entry.adr = parseIntColumn(line, 63 + shift, 6);
+        entry.link = parseIntColumn(line, 69 + shift, 6);
+        entry.initialized = parseBoolColumn(line, 75 + shift, 7);
         entry.literalValue =
-            line.size() > 82 ? trim(line.substr(82)) : std::string();
+            line.size() > 82 + shift
+                ? trim(line.substr(82 + shift))
+                : std::string();
         parsedTab.push_back(entry);
         ++index;
     }
@@ -670,4 +707,166 @@ BlockKind blockKindFromString(const std::string &name) {
         return BlockKind::Compound;
     }
     throw std::runtime_error("Unknown block kind: " + name);
+}
+
+namespace {
+
+int checkedProduct(int left, int right) {
+    const long long value = static_cast<long long>(left) * right;
+    if (value < 0 || value > 2147483647LL) {
+        throw std::runtime_error("Composite type size exceeds runtime limits");
+    }
+    return static_cast<int>(value);
+}
+
+int recordSize(int blockRef, const SymbolTable &symbols) {
+    const BTabEntry &block = symbols.btabEntry(blockRef);
+    std::vector<int> fields;
+    for (int index = block.last; index > 0; index = symbols.tabEntry(index).link) {
+        if (symbols.tabEntry(index).obj == ObjectKind::Field) {
+            fields.push_back(index);
+        }
+    }
+    int size = 0;
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
+        const TabEntry &field = symbols.tabEntry(*it);
+        size += runtimeTypeSize(field.type, field.typeRef, symbols);
+    }
+    return size;
+}
+
+void normalizeRecord(int blockRef, SymbolTable &symbols) {
+    BTabEntry &block = symbols.mutableBtabEntry(blockRef);
+    std::vector<int> fields;
+    for (int index = block.last; index > 0;
+         index = symbols.tabEntry(index).link) {
+        if (symbols.tabEntry(index).obj == ObjectKind::Field) {
+            fields.push_back(index);
+        }
+    }
+    int offset = 0;
+    for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
+        TabEntry &field = symbols.mutableTabEntry(*it);
+        if (field.type == TypeKind::Array && field.typeRef >= 0) {
+            ATabEntry &array = symbols.mutableAtabEntry(field.typeRef);
+            array.elsz = runtimeTypeSize(array.etyp, array.eref, symbols);
+            array.size = checkedProduct(array.high - array.low + 1, array.elsz);
+        } else if (field.type == TypeKind::Record && field.typeRef >= 0) {
+            normalizeRecord(field.typeRef, symbols);
+        }
+        field.adr = offset;
+        offset += runtimeTypeSize(field.type, field.typeRef, symbols);
+    }
+    block.psze = 0;
+    block.vsze = offset;
+}
+
+int layoutDeclarations(const AstNode &declarations, SymbolTable &symbols,
+                       int initialOffset);
+
+void layoutSubprogram(const AstNode &decl, SymbolTable &symbols) {
+    if (decl.symbolIndex < 0) {
+        return;
+    }
+    TabEntry &callable = symbols.mutableTabEntry(decl.symbolIndex);
+    int offset = 3;
+    int parameterSize = 0;
+    if (!decl.children.empty() && decl.children[0].kind == AstKind::Parameters) {
+        for (const AstNode &param : decl.children[0].children) {
+            if (param.symbolIndex < 0) {
+                continue;
+            }
+            TabEntry &entry = symbols.mutableTabEntry(param.symbolIndex);
+            entry.adr = offset;
+            const int size =
+                runtimeTypeSize(entry.type, entry.typeRef, symbols);
+            offset += size;
+            parameterSize += size;
+        }
+    }
+
+    if (decl.kind == AstKind::FunctionDecl) {
+        callable.adr = offset;
+        offset += runtimeTypeSize(callable.type, callable.typeRef, symbols);
+    }
+
+    const std::size_t declarationsIndex =
+        decl.kind == AstKind::FunctionDecl ? 2U : 1U;
+    if (decl.children.size() > declarationsIndex) {
+        offset = layoutDeclarations(decl.children[declarationsIndex], symbols,
+                                    offset);
+    }
+    if (callable.ref >= 0 &&
+        callable.ref < static_cast<int>(symbols.btab().size())) {
+        BTabEntry &block = symbols.mutableBtabEntry(callable.ref);
+        block.psze = parameterSize;
+        block.vsze = offset - 3 - parameterSize;
+    }
+}
+
+int layoutDeclarations(const AstNode &declarations, SymbolTable &symbols,
+                       int initialOffset) {
+    int offset = initialOffset;
+    if (declarations.kind != AstKind::Declarations) {
+        return offset;
+    }
+    for (const AstNode &decl : declarations.children) {
+        if (decl.kind == AstKind::VarDecl && decl.symbolIndex >= 0) {
+            TabEntry &entry = symbols.mutableTabEntry(decl.symbolIndex);
+            if (entry.type == TypeKind::Array && entry.typeRef >= 0) {
+                ATabEntry &array = symbols.mutableAtabEntry(entry.typeRef);
+                array.elsz = runtimeTypeSize(array.etyp, array.eref, symbols);
+                array.size =
+                    checkedProduct(array.high - array.low + 1, array.elsz);
+            } else if (entry.type == TypeKind::Record && entry.typeRef >= 0) {
+                normalizeRecord(entry.typeRef, symbols);
+            }
+            entry.adr = offset;
+            offset += runtimeTypeSize(entry.type, entry.typeRef, symbols);
+        }
+    }
+    for (const AstNode &decl : declarations.children) {
+        if (decl.kind == AstKind::ProcedureDecl ||
+            decl.kind == AstKind::FunctionDecl) {
+            layoutSubprogram(decl, symbols);
+        }
+    }
+    return offset;
+}
+
+} // namespace
+
+int runtimeTypeSize(TypeKind type, int ref, const SymbolTable &symbols) {
+    switch (type) {
+    case TypeKind::None:
+        return 0;
+    case TypeKind::Array:
+        return symbols.atabEntry(ref).size;
+    case TypeKind::Record:
+        return recordSize(ref, symbols);
+    case TypeKind::Integer:
+    case TypeKind::Real:
+    case TypeKind::Char:
+    case TypeKind::Boolean:
+    case TypeKind::String:
+    case TypeKind::Subrange:
+    case TypeKind::Enum:
+        return 1;
+    }
+    return 0;
+}
+
+void normalizeRuntimeLayout(const AstNode &ast, SymbolTable &symbols) {
+    if (ast.kind != AstKind::Program) {
+        throw std::runtime_error("Runtime layout requires a Program AST root");
+    }
+    int finalOffset = 3;
+    if (!ast.children.empty()) {
+        finalOffset = layoutDeclarations(ast.children[0], symbols, 3);
+    }
+    if (!symbols.btab().empty()) {
+        BTabEntry &program = symbols.mutableBtabEntry(0);
+        program.psze = 0;
+        program.vsze = finalOffset - 3;
+    }
 }

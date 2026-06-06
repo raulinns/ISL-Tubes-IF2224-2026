@@ -1,81 +1,158 @@
-# Arion Compiler - Milestone 3: Semantic Analysis
+# Arion Compiler - Milestone 4
 
-IF2224 Teori Bahasa Formal dan Automata | [ISL] TBFO
+Implementasi compiler dan interpreter Stack Machine untuk bahasa Arion pada
+Tugas Besar IF2224 Teori Bahasa Formal dan Otomata.
 
-![Cover](Cover.jpg)
+Pipeline lengkap tersedia untuk pengembangan:
 
-## Deskripsi Program
+```text
+Source -> Lexer -> Parser -> AST -> Semantic Analysis
+       -> Decorated AST + Symbol Table -> Intermediate Code -> Interpreter
+```
 
-Program ini merupakan implementasi compiler bahasa Arion sampai tahap **Milestone 3 (Semantic Analysis)**. Alur program membaca source code Arion atau parse tree hasil parser, membangun AST, menjalankan semantic visitor, lalu menghasilkan **Decorated AST**, **symbol table**, dan daftar diagnostic semantic.
+Sesuai QnA Milestone 4, input resmi backend adalah artifact Decorated AST
+(DAST). Intermediate Code final adalah instruksi Stack Machine, bukan TAC
+eksplisit.
 
-Fitur utama:
-
-- **Lexical Analysis**: membaca source code Arion dan menghasilkan token berbasis DFA.
-- **Syntax Analysis**: memvalidasi token dengan recursive descent parser dan membangun parse tree.
-- **AST Builder**: mengubah parse tree menjadi AST yang lebih ringkas.
-- **Semantic Analysis**: melakukan pengecekan deklarasi, scope, tipe ekspresi, assignment, kondisi kontrol, array index, record field, parameter call, dan return function.
-- **Symbol Table**: mengelola `tab`, `btab`, dan `atab` beserta operasi `lookup`, `insert`, `pushScope`, dan `popScope`.
-- **Output**: menampilkan decorated AST, symbol table, dan semantic diagnostics.
-
-## Requirements
-
-- Compiler: `g++` dengan dukungan C++17
-- Build tool: GNU Make
-- OS: Linux atau macOS
-
-## Cara Build dan Run
+## Build dan CLI
 
 ```bash
 make
 ```
 
-Menjalankan dari source code Arion:
+Mode input:
 
 ```bash
-./arion <input.txt>
-./arion <input.txt> <output.txt>
+./arion input-artifact.txt [output.txt]
+./arion --source input-arion.txt [output.txt]
+./arion --parse-tree input-parse-tree.txt [output.txt]
 ```
 
-Program juga dapat menerima parse tree ter-render hasil parser, selama file diawali root `<program>` dengan format tree ASCII yang dihasilkan `renderParseTree`.
+- Tanpa flag, input wajib memuat section Decorated AST, Symbol Table, dan
+  Semantic Diagnostics.
+- `--source` menjalankan seluruh pipeline dari source Arion.
+- `--parse-tree` memulai pipeline dari parse tree ter-render.
+- Semantic error menghentikan code generation dan menghasilkan exit code
+  nonzero.
+- Section Intermediate Code dan Program Output dari artifact lama diabaikan
+  ketika artifact dibaca ulang.
 
-Contoh:
-
-```bash
-./arion test/input.txt
-./arion test/input.txt output.txt
-```
-
-Membersihkan build:
-
-```bash
-make clean
-```
-
-## Struktur Repository
+## Format Artifact
 
 ```text
-.
-├── src/
-│   ├── main.cpp                 # Entry point dan integrasi lexer-parser-AST-semantic
-│   ├── lexer.h/.cpp             # Lexical analyzer
-│   ├── token.h                  # Definisi token
-│   ├── parser.h/.cpp            # Recursive descent parser
-│   ├── parse_tree.h/.cpp        # Struktur, render, dan pembacaan parse tree
-│   ├── ast.h/.cpp               # Struktur dan render AST
-│   ├── ast_builder.h/.cpp       # Konversi parse tree ke AST
-│   ├── symbol_table.h/.cpp      # tab, btab, atab, scope stack, lookup/insert
-│   └── semantic_analyzer.h/.cpp # Semantic visitor dan type checking
-├── doc/
-├── test/
-├── Makefile
-└── README.md
+----- Decorated AST -----
+...
+----- Symbol Table -----
+...
+----- Semantic Diagnostics -----
+...
 ```
 
-## Pembagian Tugas Milestone 3
+Symbol table memakai `tab`, `btab`, dan `atab`. Kolom `ref` menyimpan referensi
+blok/callable, sedangkan `tref` menyimpan referensi tipe sehingga function yang
+mengembalikan array atau record tetap dapat direkonstruksi. Parser juga menerima
+artifact lama yang belum memiliki kolom `tref`.
 
-| Nama | Kontribusi |
-| --- | --- |
-| Akram | Membuat AST dari parse tree, termasuk definisi node AST dan converter parse tree ke AST. |
-| Endra | Membuat `tab`, `btab`, `atab`, scope stack, predefined identifier, dan fungsi `lookup`, `insert`, `push`, `pop`. |
-| Argha | Membuat aturan semantic dan type checking, terutama ekspresi, assignment, kondisi `if`/`while`, array index, dan compatibility type. |
-| Steven | Membuat semantic visitor dan integrasi ke `main`, output decorated AST/symbol table, test end-to-end, dan error reporting. |
+Sebelum code generation, `normalizeRuntimeLayout` menghitung ulang:
+
+- alamat variabel dan parameter;
+- offset field record;
+- ukuran elemen dan total array;
+- ukuran parameter dan variabel setiap blok.
+
+Scalar, real, char, boolean, string, subrange, dan enum memakai satu slot.
+Ukuran array dan record dihitung secara rekursif.
+
+## Stack Machine
+
+Instruksi wajib:
+
+```text
+LIT LOD STO CAL INT JMP JPC OPR RET
+```
+
+Extension untuk l-value dan composite:
+
+```text
+LDA  load address
+LDI  indirect scalar load
+STI  indirect scalar store
+BLD  block load
+BST  block store
+ADI  add record-field offset
+IXA  checked array-index address
+```
+
+`LOD`, `STO`, `LDA`, dan `CAL` menggunakan lexical-level difference. Bentuk call
+dan return adalah:
+
+```text
+CAL level target argumentSlotCount
+RET 0 resultOffset resultSlotCount
+```
+
+Operand tambahan disimpan sebagai data instruksi. Komentar hanya dipakai untuk
+keterbacaan dan tidak memengaruhi eksekusi. Renderer dan parser Intermediate
+Code diuji secara round-trip.
+
+Setiap activation frame memiliki tiga slot logis awal:
+
+```text
+0 static link
+1 dynamic link
+2 return address
+3... parameter, function result, dan variabel lokal
+```
+
+Metadata frame disimpan terpisah dari slot program. Operand expression juga
+memakai stack terpisah, sehingga temporary caller tetap utuh saat function
+return. Static link dipakai untuk akses nonlocal; dynamic link hanya dipakai
+untuk kembali ke caller.
+
+## Fitur Bahasa
+
+- scalar integer, real, boolean, char, dan string;
+- arithmetic, integer division, modulo, relational, dan boolean operation;
+- assignment, `if`, `case`, `while`, `repeat`, `for to/downto`;
+- `readln`, multi-argument `write`, dan `writeln`;
+- procedure/function, zero-argument call, nested scope, dan recursion;
+- function call di tengah expression;
+- array, record, nested composite, dynamic index, composite assignment;
+- parameter dan return value composite;
+- definite-assignment analysis pada sequence, branch, dan loop.
+
+## Runtime Safety
+
+Interpreter menghentikan program secara terkontrol dengan exit code nonzero
+untuk:
+
+- activation-frame overflow (maksimal 1000 frame);
+- operand/frame underflow;
+- akses atau penulisan header frame;
+- call/return dan operand-depth corruption;
+- invalid jump/call target;
+- array out-of-bounds;
+- division/modulo by zero;
+- invalid runtime operand type;
+- integer dan real overflow/underflow.
+
+Pesan runtime menyertakan instruction pointer. Error khusus tersedia untuk
+bounds, numeric overflow, numeric underflow, invalid memory, dan stack
+corruption.
+
+## Pengujian
+
+```bash
+make test
+make test-sanitize
+```
+
+`make test` menjalankan regression M1-M3, golden integration test M4, DAST
+round-trip, nested call/recursion, control flow, I/O, array/record, composite
+parameter/return, semantic gating, dan unit test vulnerability VM.
+
+`make test-sanitize` membangun dan menjalankan suite yang sama dengan
+AddressSanitizer dan UndefinedBehaviorSanitizer.
+
+Keterbatasan saat ini: `readln` membaca token yang dipisahkan whitespace, dan
+integer runtime menggunakan signed 32-bit dengan overflow checking.

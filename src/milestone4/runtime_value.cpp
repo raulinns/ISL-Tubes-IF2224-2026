@@ -47,6 +47,8 @@ std::string runtimeValueKindToString(RuntimeValueKind kind) {
         return "char";
     case RuntimeValueKind::String:
         return "string";
+    case RuntimeValueKind::Address:
+        return "address";
     }
 
     throw std::invalid_argument("Unknown runtime value kind");
@@ -68,6 +70,10 @@ RuntimeValue RuntimeValue::makeString(std::string value) {
     return RuntimeValue(std::move(value));
 }
 
+RuntimeValue RuntimeValue::makeAddress(int frameIndex, int offset) {
+    return RuntimeValue(RuntimeAddress{frameIndex, offset});
+}
+
 RuntimeValue RuntimeValue::defaultValue(RuntimeValueKind kind) {
     switch (kind) {
     case RuntimeValueKind::Uninitialized:
@@ -82,6 +88,8 @@ RuntimeValue RuntimeValue::defaultValue(RuntimeValueKind kind) {
         return makeChar('\0');
     case RuntimeValueKind::String:
         return makeString("");
+    case RuntimeValueKind::Address:
+        throw std::invalid_argument("Address has no default value");
     }
 
     throw std::invalid_argument("Unknown runtime value kind");
@@ -120,7 +128,9 @@ RuntimeValue RuntimeValue::parseLiteral(const std::string &text,
         return decoded.size() == 1 ? makeChar(decoded[0]) : makeString(decoded);
     }
 
-    if (text.find('.') != std::string::npos || loweredType == "real") {
+    if (text.find('.') != std::string::npos ||
+        text.find('e') != std::string::npos ||
+        text.find('E') != std::string::npos || loweredType == "real") {
         std::size_t parsed = 0;
         const double value = std::stod(text, &parsed);
         if (parsed != text.size()) {
@@ -153,7 +163,10 @@ RuntimeValueKind RuntimeValue::kind() const {
     if (std::holds_alternative<char>(value_)) {
         return RuntimeValueKind::Char;
     }
-    return RuntimeValueKind::String;
+    if (std::holds_alternative<std::string>(value_)) {
+        return RuntimeValueKind::String;
+    }
+    return RuntimeValueKind::Address;
 }
 
 bool RuntimeValue::isInitialized() const {
@@ -203,6 +216,13 @@ const std::string &RuntimeValue::asString() const {
     return std::get<std::string>(value_);
 }
 
+RuntimeAddress RuntimeValue::asAddress() const {
+    if (!std::holds_alternative<RuntimeAddress>(value_)) {
+        throw std::runtime_error("Runtime value is not an address");
+    }
+    return std::get<RuntimeAddress>(value_);
+}
+
 std::string RuntimeValue::toString() const {
     std::ostringstream out;
     switch (kind()) {
@@ -220,6 +240,11 @@ std::string RuntimeValue::toString() const {
         return std::string(1, std::get<char>(value_));
     case RuntimeValueKind::String:
         return std::get<std::string>(value_);
+    case RuntimeValueKind::Address: {
+        const RuntimeAddress address = std::get<RuntimeAddress>(value_);
+        return "<address " + std::to_string(address.frameIndex) + ":" +
+               std::to_string(address.offset) + ">";
+    }
     }
 
     throw std::invalid_argument("Unknown runtime value kind");

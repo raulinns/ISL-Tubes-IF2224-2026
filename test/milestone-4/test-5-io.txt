@@ -1,0 +1,14 @@
+program InputOutput;
+
+var
+  number: integer;
+  ratio: real;
+  letter: char;
+  word: string;
+  flag: boolean;
+
+begin
+  readln(number, ratio, letter, word, flag);
+  write(number, ratio, letter, word);
+  writeln(flag)
+end.

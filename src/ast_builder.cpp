@@ -71,7 +71,8 @@ AstNode buildAtomicValueNode(const ParseNode &node) {
         return AstNode(AstKind::Identifier, parts.value);
     }
     if ((parts.name == "intcon" || parts.name == "realcon" ||
-         parts.name == "charcon" || parts.name == "string") &&
+         parts.name == "charcon" || parts.name == "string" ||
+         parts.name == "boolcon") &&
         parts.hasValue) {
         return AstNode(AstKind::Literal, parts.value);
     }
@@ -403,7 +404,8 @@ AstNode buildFactor(const ParseNode &node) {
     const ParseNode &first = node.children.front();
 
     if (hasTokenName(first, "intcon") || hasTokenName(first, "realcon") ||
-        hasTokenName(first, "charcon") || hasTokenName(first, "string")) {
+        hasTokenName(first, "charcon") || hasTokenName(first, "string") ||
+        hasTokenName(first, "boolcon")) {
         return buildAtomicValueNode(first);
     }
 

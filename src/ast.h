@@ -63,6 +63,8 @@ struct AstNode {
 };
 
 std::string astKindToString(AstKind kind);
+AstKind astKindFromString(const std::string &name);
 std::string renderAst(const AstNode &root);
+AstNode parseRenderedAst(const std::string &text);
 
 #endif // AST_H

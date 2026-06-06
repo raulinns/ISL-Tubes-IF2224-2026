@@ -1,11 +1,21 @@
 #include "code_generator.h"
 
+#include "runtime_value.h"
+
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
+
+struct RuntimeType {
+    TypeKind kind = TypeKind::None;
+    int ref = 0;
+};
+
+std::vector<int> currentFunctionSymbols;
 
 std::string lowerCopy(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
@@ -14,296 +24,358 @@ std::string lowerCopy(std::string text) {
     return text;
 }
 
-[[noreturn]] void unsupportedCodegenNode(const AstNode &node,
-                                         const std::string &ownerHint) {
-    throw std::runtime_error("Milestone 4 placeholder: code generation for " +
-                             astKindToString(node.kind) +
-                             (node.text.empty() ? "" : "(" + node.text + ")") +
-                             " belongs to " + ownerHint + " integration");
+const TabEntry &symbol(const SymbolTable &symbols, int index,
+                       const std::string &context) {
+    if (index < 0) {
+        throw std::runtime_error(context + " is missing a symbol reference");
+    }
+    return symbols.tabEntry(index);
 }
 
-const TabEntry &entryForSymbol(const SymbolTable &symbols, int symbolIndex,
-                               const std::string &context) {
-    if (symbolIndex < 0) {
-        throw std::runtime_error(context + " does not have a decorated symbol index");
-    }
-    return symbols.tabEntry(symbolIndex);
+RuntimeType typeOfEntry(const TabEntry &entry) {
+    return {entry.type, entry.typeRef};
 }
 
-bool isSimpleRuntimeType(TypeKind type) {
-    return type == TypeKind::Integer || type == TypeKind::Real ||
-           type == TypeKind::Boolean || type == TypeKind::Char ||
-           type == TypeKind::String || type == TypeKind::Subrange ||
-           type == TypeKind::Enum;
+int typeSize(const RuntimeType &type, const SymbolTable &symbols) {
+    return runtimeTypeSize(type.kind, type.ref, symbols);
 }
 
-bool hasSubprogramDeclarations(const AstNode &node) {
-    if (node.kind != AstKind::Declarations) {
-        return false;
-    }
-
-    for (const AstNode &decl : node.children) {
-        if (decl.kind == AstKind::ProcedureDecl ||
-            decl.kind == AstKind::FunctionDecl) {
-            return true;
-        }
-    }
-    return false;
+bool isComposite(const RuntimeType &type) {
+    return type.kind == TypeKind::Array || type.kind == TypeKind::Record;
 }
 
-void allocateParameterStorage(const AstNode &node, CodeGenContext &context) {
-    if (node.kind != AstKind::Parameters) {
-        return;
+int lexicalDifference(const CodeGenContext &context, const TabEntry &entry) {
+    const int difference = context.currentLexicalLevel() - entry.lev;
+    if (difference < 0) {
+        throw std::runtime_error("Invalid lexical reference to " +
+                                 entry.identifier);
     }
-
-    for (const AstNode &param : node.children) {
-        if (param.kind == AstKind::ParameterDecl) {
-            context.allocateRuntimeAddress(param.symbolIndex);
-        }
-    }
+    return difference;
 }
 
-void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
-                               CodeGenContext &context);
-
-void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
-                          CodeGenContext &context) {
-    if (node.kind != AstKind::Declarations) {
-        return;
-    }
-
-    for (const AstNode &decl : node.children) {
-        switch (decl.kind) {
-        case AstKind::ConstDecl:
-        case AstKind::TypeDecl:
-            break;
-        case AstKind::VarDecl: {
-            const TabEntry entry =
-                entryForSymbol(symbols, decl.symbolIndex, "Variable declaration");
-            if (!isSimpleRuntimeType(entry.type)) {
-                unsupportedCodegenNode(decl, "array/record runtime layout");
-            }
-            context.allocateRuntimeAddress(decl.symbolIndex);
-            break;
-        }
-        case AstKind::ProcedureDecl:
-        case AstKind::FunctionDecl:
-            allocateSubprogramStorage(decl, symbols, context);
-            break;
-        default:
-            break;
-        }
-    }
+bool isCurrentFunctionResult(int symbolIndex) {
+    return !currentFunctionSymbols.empty() &&
+           currentFunctionSymbols.back() == symbolIndex;
 }
 
-void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
-                               CodeGenContext &context) {
-    if (decl.kind == AstKind::FunctionDecl) {
-        context.allocateRuntimeAddress(decl.symbolIndex);
+int literalPayload(const std::string &text, const std::string &type) {
+    try {
+        const RuntimeValue value = RuntimeValue::parseLiteral(text, type);
+        if (value.kind() == RuntimeValueKind::Integer) return value.asInteger();
+        if (value.kind() == RuntimeValueKind::Boolean)
+            return value.asBoolean() ? 1 : 0;
+        if (value.kind() == RuntimeValueKind::Char)
+            return static_cast<unsigned char>(value.asChar());
+    } catch (const std::exception &) {
     }
-
-    if (!decl.children.empty()) {
-        allocateParameterStorage(decl.children[0], context);
-    }
-
-    const std::size_t declarationsIndex =
-        decl.kind == AstKind::FunctionDecl ? 2U : 1U;
-    if (decl.children.size() > declarationsIndex) {
-        allocateDeclarations(decl.children[declarationsIndex], symbols, context);
-    }
+    return 0;
 }
 
-int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
-                             CodeGenContext &context) {
+void emitOpr(CodeGenContext &context, OprCode code,
+             std::vector<int> extra = {}) {
+    context.emit(OpCode::OPR, 0, static_cast<int>(code), std::move(extra));
+}
+
+std::vector<int> parameterSymbols(const TabEntry &callable,
+                                  const SymbolTable &symbols) {
+    std::vector<int> parameters;
+    if (callable.ref <= 0) {
+        return parameters;
+    }
+    int index = symbols.btabEntry(callable.ref).lpar;
+    while (index > 0 && symbols.tabEntry(index).obj == ObjectKind::Parameter) {
+        parameters.push_back(index);
+        index = symbols.tabEntry(index).link;
+    }
+    std::reverse(parameters.begin(), parameters.end());
+    return parameters;
+}
+
+RuntimeType emitAddress(const AstNode &node, const SymbolTable &symbols,
+                        CodeGenContext &context) {
     if (node.kind != AstKind::Variable && node.kind != AstKind::Identifier) {
-        throw std::runtime_error("Expected scalar variable/identifier as l-value");
+        throw std::runtime_error("Expected an assignable variable");
     }
-    if (!node.children.empty()) {
-        unsupportedCodegenNode(node, "array/record runtime layout");
+    const TabEntry &base = symbol(symbols, node.symbolIndex, "Variable");
+    if (base.obj != ObjectKind::Variable &&
+        base.obj != ObjectKind::Parameter &&
+        !isCurrentFunctionResult(node.symbolIndex)) {
+        throw std::runtime_error("Identifier is not assignable: " + node.text);
     }
-
-    const TabEntry entry =
-        entryForSymbol(symbols, node.symbolIndex, "Variable access");
-    if (entry.obj != ObjectKind::Variable && entry.obj != ObjectKind::Parameter &&
-        entry.obj != ObjectKind::Function) {
-        throw std::runtime_error("Identifier is not stored in runtime memory: " +
-                                 node.text);
+    const int level = isCurrentFunctionResult(node.symbolIndex)
+                          ? 0
+                          : lexicalDifference(context, base);
+    context.emit(OpCode::LDA, level, base.adr);
+    RuntimeType current = typeOfEntry(base);
+    for (const AstNode &component : node.children) {
+        if (component.kind == AstKind::IndexAccess) {
+            for (const AstNode &index : component.children) {
+                if (current.kind != TypeKind::Array) {
+                    throw std::runtime_error("Index access on non-array value");
+                }
+                const ATabEntry &array = symbols.atabEntry(current.ref);
+                generateExpression(index, symbols, context);
+                context.emit(OpCode::IXA, 0, array.low,
+                             std::vector<int>{array.high, array.elsz});
+                current = {array.etyp, array.eref};
+            }
+        } else if (component.kind == AstKind::FieldAccess) {
+            if (current.kind != TypeKind::Record || component.symbolIndex < 0) {
+                throw std::runtime_error("Invalid record field access");
+            }
+            const TabEntry &field = symbols.tabEntry(component.symbolIndex);
+            context.emit(OpCode::ADI, 0, field.adr);
+            current = typeOfEntry(field);
+        }
     }
-    if (!context.hasRuntimeAddress(node.symbolIndex)) {
-        context.allocateRuntimeAddress(node.symbolIndex);
-    }
-    return context.runtimeAddressOf(node.symbolIndex);
+    return current;
 }
 
-void generateSubprogramDeclaration(const AstNode &decl, const SymbolTable &symbols,
-                                   CodeGenContext &context) {
-    if (decl.symbolIndex < 0) {
-        throw std::runtime_error("Subprogram declaration is missing symbol index");
-    }
-
-    context.bindSubprogramEntry(decl.symbolIndex, context.nextInstructionIndex());
-
-    const std::size_t bodyIndex = decl.kind == AstKind::FunctionDecl ? 3U : 2U;
-    if (decl.children.size() > bodyIndex) {
-        generateStatement(decl.children[bodyIndex], symbols, context);
-    }
-
-    context.emit(OpCode::RET, 0, 0, "return " + decl.text);
-}
-
-void generateDeclarations(const AstNode &node, const SymbolTable &symbols,
-                          CodeGenContext &context) {
-    if (node.kind != AstKind::Declarations) {
+void emitVariableValue(const AstNode &node, const SymbolTable &symbols,
+                       CodeGenContext &context) {
+    const TabEntry &entry = symbol(symbols, node.symbolIndex, "Variable");
+    RuntimeType type = typeOfEntry(entry);
+    if (node.children.empty() && !isComposite(type) &&
+        !isCurrentFunctionResult(node.symbolIndex)) {
+        context.emit(OpCode::LOD, lexicalDifference(context, entry), entry.adr);
         return;
     }
-
-    for (const AstNode &decl : node.children) {
-        switch (decl.kind) {
-        case AstKind::ConstDecl:
-        case AstKind::TypeDecl:
-        case AstKind::VarDecl:
-            break;
-        case AstKind::ProcedureDecl:
-        case AstKind::FunctionDecl:
-            generateSubprogramDeclaration(decl, symbols, context);
-            break;
-        default:
-            break;
-        }
+    type = emitAddress(node, symbols, context);
+    if (isComposite(type)) {
+        context.emit(OpCode::BLD, 0, typeSize(type, symbols));
+    } else {
+        context.emit(OpCode::LDI, 0, 0);
     }
 }
 
 void generateAssignment(const AstNode &node, const SymbolTable &symbols,
                         CodeGenContext &context) {
-    if (node.children.size() < 2) {
-        throw std::runtime_error("AssignStmt requires target and expression");
+    if (node.children.size() != 2) {
+        throw std::runtime_error("Assignment requires target and value");
     }
-
     generateExpression(node.children[1], symbols, context);
-    const int address = scalarAddressForVariable(node.children[0], symbols, context);
-    context.emit(OpCode::STO, 0, address);
-}
-
-void emitOpr(CodeGenContext &context, OprCode op,
-             const std::string &operatorHint = "") {
-    context.emit(OpCode::OPR, 0, static_cast<int>(op), operatorHint);
-}
-
-void generateIfStatement(const AstNode &node, const SymbolTable &symbols,
-                         CodeGenContext &context) {
-    if (node.children.size() < 2) {
-        throw std::runtime_error("IfStmt requires condition and then statement");
+    if (node.children[0].children.empty() &&
+        !isCurrentFunctionResult(node.children[0].symbolIndex)) {
+        const TabEntry &target =
+            symbol(symbols, node.children[0].symbolIndex, "Assignment target");
+        const RuntimeType type = typeOfEntry(target);
+        if (!isComposite(type)) {
+            context.emit(OpCode::STO, lexicalDifference(context, target),
+                         target.adr);
+            return;
+        }
     }
+    const RuntimeType target =
+        emitAddress(node.children[0], symbols, context);
+    if (isComposite(target)) {
+        context.emit(OpCode::BST, 0, typeSize(target, symbols));
+    } else {
+        context.emit(OpCode::STI, 0, 0);
+    }
+}
 
-    generateExpression(node.children[0], symbols, context);
-    const int falseJump = context.emit(OpCode::JPC, 0, 0, "if false");
-
-    generateStatement(node.children[1], symbols, context);
-
+void generateIf(const AstNode &node, const SymbolTable &symbols,
+                CodeGenContext &context) {
+    generateExpression(node.children.at(0), symbols, context);
+    const int falseJump = context.emit(OpCode::JPC, 0, 0);
+    generateStatement(node.children.at(1), symbols, context);
     if (node.children.size() > 2) {
-        const int endJump = context.emit(OpCode::JMP, 0, 0, "if end");
+        const int endJump = context.emit(OpCode::JMP, 0, 0);
         context.patch(falseJump, context.nextInstructionIndex());
         generateStatement(node.children[2], symbols, context);
         context.patch(endJump, context.nextInstructionIndex());
-        return;
+    } else {
+        context.patch(falseJump, context.nextInstructionIndex());
     }
-
-    context.patch(falseJump, context.nextInstructionIndex());
 }
 
-void generateWhileStatement(const AstNode &node, const SymbolTable &symbols,
-                            CodeGenContext &context) {
-    if (node.children.size() < 2) {
-        throw std::runtime_error("WhileStmt requires condition and body");
-    }
-
+void generateWhile(const AstNode &node, const SymbolTable &symbols,
+                   CodeGenContext &context) {
     const int start = context.nextInstructionIndex();
-    generateExpression(node.children[0], symbols, context);
-    const int exitJump = context.emit(OpCode::JPC, 0, 0, "while exit");
-    generateStatement(node.children[1], symbols, context);
-    context.emit(OpCode::JMP, 0, start, "while repeat");
-    context.patch(exitJump, context.nextInstructionIndex());
+    generateExpression(node.children.at(0), symbols, context);
+    const int finish = context.emit(OpCode::JPC, 0, 0);
+    generateStatement(node.children.at(1), symbols, context);
+    context.emit(OpCode::JMP, 0, start);
+    context.patch(finish, context.nextInstructionIndex());
 }
 
-void generateRepeatStatement(const AstNode &node, const SymbolTable &symbols,
-                             CodeGenContext &context) {
-    if (node.children.size() < 2) {
-        throw std::runtime_error("RepeatStmt requires body and condition");
-    }
-
+void generateRepeat(const AstNode &node, const SymbolTable &symbols,
+                    CodeGenContext &context) {
     const int start = context.nextInstructionIndex();
-    generateStatement(node.children[0], symbols, context);
-    generateExpression(node.children[1], symbols, context);
-    context.emit(OpCode::JPC, 0, start, "repeat until");
+    generateStatement(node.children.at(0), symbols, context);
+    generateExpression(node.children.at(1), symbols, context);
+    context.emit(OpCode::JPC, 0, start);
 }
 
-void generateForStatement(const AstNode &node, const SymbolTable &symbols,
-                          CodeGenContext &context) {
-    if (node.children.size() < 4) {
-        throw std::runtime_error("ForStmt requires counter, bounds, and body");
-    }
-
-    const std::string direction = lowerCopy(node.text);
-    const bool isTo = direction == "to";
-    const bool isDownto = direction == "downto";
-    if (!isTo && !isDownto) {
-        throw std::runtime_error("Unsupported for direction: " + node.text);
-    }
-
-    const int counterAddress =
-        scalarAddressForVariable(node.children[0], symbols, context);
-
-    generateExpression(node.children[1], symbols, context);
-    context.emit(OpCode::STO, 0, counterAddress, "for init");
-
+void generateFor(const AstNode &node, const SymbolTable &symbols,
+                 CodeGenContext &context) {
+    const bool ascending = lowerCopy(node.text) == "to";
+    generateExpression(node.children.at(1), symbols, context);
+    emitAddress(node.children.at(0), symbols, context);
+    context.emit(OpCode::STI, 0, 0);
     const int start = context.nextInstructionIndex();
-    context.emit(OpCode::LOD, 0, counterAddress, "for counter");
-    generateExpression(node.children[2], symbols, context);
-    emitOpr(context, isTo ? OprCode::LEQ : OprCode::GEQ,
-            isTo ? "for to" : "for downto");
-    const int exitJump = context.emit(OpCode::JPC, 0, 0, "for exit");
-
-    generateStatement(node.children[3], symbols, context);
-
-    context.emit(OpCode::LOD, 0, counterAddress, "for counter");
-    context.emit(OpCode::LIT, 0, 1, "for step");
-    emitOpr(context, isTo ? OprCode::ADD : OprCode::SUB,
-            isTo ? "for increment" : "for decrement");
-    context.emit(OpCode::STO, 0, counterAddress, "for update");
-    context.emit(OpCode::JMP, 0, start, "for repeat");
-    context.patch(exitJump, context.nextInstructionIndex());
+    emitVariableValue(node.children.at(0), symbols, context);
+    generateExpression(node.children.at(2), symbols, context);
+    emitOpr(context, ascending ? OprCode::LEQ : OprCode::GEQ);
+    const int finish = context.emit(OpCode::JPC, 0, 0);
+    generateStatement(node.children.at(3), symbols, context);
+    emitVariableValue(node.children.at(0), symbols, context);
+    context.emitLiteral(0, 1, "1");
+    emitOpr(context, ascending ? OprCode::ADD : OprCode::SUB);
+    emitAddress(node.children.at(0), symbols, context);
+    context.emit(OpCode::STI, 0, 0);
+    context.emit(OpCode::JMP, 0, start);
+    context.patch(finish, context.nextInstructionIndex());
 }
 
-void generateCaseStatement(const AstNode &node, const SymbolTable &symbols,
-                           CodeGenContext &context) {
-    if (node.children.empty()) {
-        throw std::runtime_error("CaseStmt requires selector expression");
-    }
-
+void generateCase(const AstNode &node, const SymbolTable &symbols,
+                  CodeGenContext &context) {
     std::vector<int> endJumps;
-    // Recheck the case expression for each case label because OPR EQL consumes both values.
-    for (std::size_t branchIndex = 1; branchIndex < node.children.size();
-         ++branchIndex) {
-        const AstNode &branch = node.children[branchIndex];
+    for (std::size_t i = 1; i < node.children.size(); ++i) {
+        const AstNode &branch = node.children[i];
         if (branch.children.size() < 2) {
-            throw std::runtime_error("CaseBranch requires labels and statement");
+            continue;
         }
-
-        const AstNode &labels = branch.children[0];
-        for (const AstNode &label : labels.children) {
+        for (const AstNode &label : branch.children[0].children) {
             generateExpression(node.children[0], symbols, context);
             generateExpression(label, symbols, context);
-            emitOpr(context, OprCode::EQL, "case label");
-            const int nextLabel = context.emit(OpCode::JPC, 0, 0, "case next");
+            emitOpr(context, OprCode::EQL);
+            const int next = context.emit(OpCode::JPC, 0, 0);
             generateStatement(branch.children[1], symbols, context);
-            endJumps.push_back(context.emit(OpCode::JMP, 0, 0, "case end"));
-            context.patch(nextLabel, context.nextInstructionIndex());
+            endJumps.push_back(context.emit(OpCode::JMP, 0, 0));
+            context.patch(next, context.nextInstructionIndex());
+        }
+    }
+    for (const int jump : endJumps) {
+        context.patch(jump, context.nextInstructionIndex());
+    }
+}
+
+int inputTypeCode(TypeKind type) {
+    switch (type) {
+    case TypeKind::Integer:
+    case TypeKind::Subrange:
+    case TypeKind::Enum:
+        return 1;
+    case TypeKind::Real:
+        return 2;
+    case TypeKind::Boolean:
+        return 3;
+    case TypeKind::Char:
+        return 4;
+    case TypeKind::String:
+        return 5;
+    default:
+        throw std::runtime_error("readln only accepts scalar variables");
+    }
+}
+
+void generateBuiltinCall(const AstNode &node, const SymbolTable &symbols,
+                         CodeGenContext &context,
+                         const std::string &name) {
+    if (name == "readln") {
+        if (node.children.empty()) {
+            throw std::runtime_error("readln requires at least one argument");
+        }
+        for (const AstNode &argument : node.children) {
+            const RuntimeType type = emitAddress(argument, symbols, context);
+            emitOpr(context, OprCode::READLN, {inputTypeCode(type.kind)});
+        }
+        return;
+    }
+    const bool newline = name == "writeln";
+    if (node.children.empty()) {
+        if (newline) {
+            emitOpr(context, OprCode::WRTLN, {1});
+        }
+        return;
+    }
+    for (std::size_t i = 0; i < node.children.size(); ++i) {
+        generateExpression(node.children[i], symbols, context);
+        emitOpr(context, newline && i + 1 == node.children.size()
+                             ? OprCode::WRTLN
+                             : OprCode::WRT);
+    }
+}
+
+void generateDeclarations(const AstNode &declarations,
+                          const SymbolTable &symbols,
+                          CodeGenContext &context);
+
+void generateSubprogram(const AstNode &decl, const SymbolTable &symbols,
+                        CodeGenContext &context) {
+    const TabEntry &callable =
+        symbol(symbols, decl.symbolIndex, "Subprogram declaration");
+    context.bindSubprogramEntry(decl.symbolIndex,
+                                context.nextInstructionIndex());
+
+    const int previousLevel = context.currentLexicalLevel();
+    context.setCurrentLexicalLevel(callable.lev + 1);
+    if (decl.kind == AstKind::FunctionDecl) {
+        currentFunctionSymbols.push_back(decl.symbolIndex);
+    }
+
+    const std::size_t declarationsIndex =
+        decl.kind == AstKind::FunctionDecl ? 2U : 1U;
+    int bodyJump = -1;
+    if (decl.children.size() > declarationsIndex) {
+        const AstNode &nested = decl.children[declarationsIndex];
+        const bool hasNested = std::any_of(
+            nested.children.begin(), nested.children.end(),
+            [](const AstNode &node) {
+                return node.kind == AstKind::ProcedureDecl ||
+                       node.kind == AstKind::FunctionDecl;
+            });
+        if (hasNested) {
+            bodyJump = context.emit(OpCode::JMP, 0, 0);
+            generateDeclarations(nested, symbols, context);
+            context.patch(bodyJump, context.nextInstructionIndex());
         }
     }
 
-    const int caseEnd = context.nextInstructionIndex();
-    for (const int jump : endJumps) {
-        context.patch(jump, caseEnd);
+    const BTabEntry &block = symbols.btabEntry(callable.ref);
+    context.emit(OpCode::INT, 0,
+                 CodeGenContext::kFrameHeaderSize + block.psze + block.vsze);
+
+    const std::vector<int> params = parameterSymbols(callable, symbols);
+    for (auto it = params.rbegin(); it != params.rend(); ++it) {
+        const TabEntry &parameter = symbols.tabEntry(*it);
+        const RuntimeType type = typeOfEntry(parameter);
+        context.emit(OpCode::LDA, 0, parameter.adr);
+        if (isComposite(type)) {
+            context.emit(OpCode::BST, 0, typeSize(type, symbols));
+        } else {
+            context.emit(OpCode::STI, 0, 0);
+        }
+    }
+
+    const std::size_t bodyIndex =
+        decl.kind == AstKind::FunctionDecl ? 3U : 2U;
+    if (decl.children.size() > bodyIndex) {
+        generateStatement(decl.children[bodyIndex], symbols, context);
+    }
+    const int resultSize =
+        decl.kind == AstKind::FunctionDecl
+            ? runtimeTypeSize(callable.type, callable.typeRef, symbols)
+            : 0;
+    context.emit(OpCode::RET, 0,
+                 resultSize > 0 ? callable.adr : 0,
+                 std::vector<int>{resultSize});
+
+    if (decl.kind == AstKind::FunctionDecl) {
+        currentFunctionSymbols.pop_back();
+    }
+    context.setCurrentLexicalLevel(previousLevel);
+}
+
+void generateDeclarations(const AstNode &declarations,
+                          const SymbolTable &symbols,
+                          CodeGenContext &context) {
+    for (const AstNode &decl : declarations.children) {
+        if (decl.kind == AstKind::ProcedureDecl ||
+            decl.kind == AstKind::FunctionDecl) {
+            generateSubprogram(decl, symbols, context);
+        }
     }
 }
 
@@ -313,35 +385,40 @@ CodeGeneratorResult generateIntermediateCode(const AstNode &decoratedAst,
                                              const SymbolTable &symbols) {
     CodeGenContext context;
     generateProgram(decoratedAst, symbols, context);
+    context.validateCallPatches();
     return {context, context.code()};
 }
 
 void generateProgram(const AstNode &decoratedAst, const SymbolTable &symbols,
                      CodeGenContext &context) {
     if (decoratedAst.kind != AstKind::Program) {
-        throw std::runtime_error("Intermediate code generation expects Program root");
+        throw std::runtime_error("Code generation requires Program root");
     }
-
+    currentFunctionSymbols.clear();
     context.reset();
-
+    bool hasSubprogram = false;
     if (!decoratedAst.children.empty()) {
-        allocateDeclarations(decoratedAst.children[0], symbols, context);
+        hasSubprogram = std::any_of(
+            decoratedAst.children[0].children.begin(),
+            decoratedAst.children[0].children.end(), [](const AstNode &node) {
+                return node.kind == AstKind::ProcedureDecl ||
+                       node.kind == AstKind::FunctionDecl;
+            });
     }
-
     int mainJump = -1;
-    if (!decoratedAst.children.empty() &&
-        hasSubprogramDeclarations(decoratedAst.children[0])) {
-        mainJump = context.emit(OpCode::JMP, 0, 0, "main entry");
+    if (hasSubprogram) {
+        mainJump = context.emit(OpCode::JMP, 0, 0);
         generateDeclarations(decoratedAst.children[0], symbols, context);
         context.patch(mainJump, context.nextInstructionIndex());
     }
-
-    context.emit(OpCode::INT, 0, context.frameSize());
-
+    context.setCurrentLexicalLevel(0);
+    const int globalSize =
+        CodeGenContext::kFrameHeaderSize +
+        (symbols.btab().empty() ? 0 : symbols.btabEntry(0).vsze);
+    context.emit(OpCode::INT, 0, globalSize);
     if (decoratedAst.children.size() > 1) {
         generateStatement(decoratedAst.children[1], symbols, context);
     }
-
     context.emit(OpCode::RET, 0, 0);
 }
 
@@ -360,24 +437,131 @@ void generateStatement(const AstNode &node, const SymbolTable &symbols,
         generateAssignment(node, symbols, context);
         return;
     case AstKind::IfStmt:
-        generateIfStatement(node, symbols, context);
+        generateIf(node, symbols, context);
         return;
     case AstKind::WhileStmt:
-        generateWhileStatement(node, symbols, context);
+        generateWhile(node, symbols, context);
         return;
     case AstKind::RepeatStmt:
-        generateRepeatStatement(node, symbols, context);
+        generateRepeat(node, symbols, context);
         return;
     case AstKind::ForStmt:
-        generateForStatement(node, symbols, context);
+        generateFor(node, symbols, context);
         return;
     case AstKind::CaseStmt:
-        generateCaseStatement(node, symbols, context);
+        generateCase(node, symbols, context);
         return;
     case AstKind::Call:
+    case AstKind::Identifier:
         generateCall(node, symbols, context, false);
         return;
     default:
-        unsupportedCodegenNode(node, "Akram/Endra");
+        throw std::runtime_error("Unsupported statement node: " +
+                                 astKindToString(node.kind));
     }
+}
+
+void generateExpression(const AstNode &node, const SymbolTable &symbols,
+                        CodeGenContext &context) {
+    switch (node.kind) {
+    case AstKind::Literal:
+        context.emitLiteral(0, literalPayload(node.text, node.inferredType),
+                            node.text);
+        return;
+    case AstKind::Variable:
+        emitVariableValue(node, symbols, context);
+        return;
+    case AstKind::Identifier: {
+        const TabEntry &entry =
+            symbol(symbols, node.symbolIndex, "Identifier expression");
+        if (entry.obj == ObjectKind::Constant) {
+            context.emitLiteral(
+                0, literalPayload(entry.literalValue,
+                                  typeKindToString(entry.type)),
+                entry.literalValue);
+        } else if (entry.obj == ObjectKind::Variable ||
+                   entry.obj == ObjectKind::Parameter) {
+            emitVariableValue(node, symbols, context);
+        } else if (entry.obj == ObjectKind::Function) {
+            generateCall(node, symbols, context, true);
+        } else {
+            throw std::runtime_error("Identifier is not a runtime value: " +
+                                     node.text);
+        }
+        return;
+    }
+    case AstKind::Call:
+        generateCall(node, symbols, context, true);
+        return;
+    case AstKind::UnaryExpr: {
+        generateExpression(node.children.at(0), symbols, context);
+        const std::string op = lowerCopy(node.text);
+        if (op == "minus") emitOpr(context, OprCode::NEG);
+        else if (op == "notsy") emitOpr(context, OprCode::NOT);
+        else if (op != "plus")
+            throw std::runtime_error("Unsupported unary operator: " + node.text);
+        return;
+    }
+    case AstKind::BinaryExpr: {
+        generateExpression(node.children.at(0), symbols, context);
+        generateExpression(node.children.at(1), symbols, context);
+        const std::string op = lowerCopy(node.text);
+        if (op == "plus") emitOpr(context, OprCode::ADD);
+        else if (op == "minus") emitOpr(context, OprCode::SUB);
+        else if (op == "times") emitOpr(context, OprCode::MUL);
+        else if (op == "rdiv") emitOpr(context, OprCode::DIV);
+        else if (op == "idiv") emitOpr(context, OprCode::IDIV);
+        else if (op == "imod") emitOpr(context, OprCode::MOD);
+        else if (op == "andsy") emitOpr(context, OprCode::AND);
+        else if (op == "orsy") emitOpr(context, OprCode::OR);
+        else if (op == "eql") emitOpr(context, OprCode::EQL);
+        else if (op == "neq") emitOpr(context, OprCode::NEQ);
+        else if (op == "lss") emitOpr(context, OprCode::LSS);
+        else if (op == "geq") emitOpr(context, OprCode::GEQ);
+        else if (op == "gtr") emitOpr(context, OprCode::GTR);
+        else if (op == "leq") emitOpr(context, OprCode::LEQ);
+        else throw std::runtime_error("Unsupported binary operator: " + node.text);
+        return;
+    }
+    default:
+        throw std::runtime_error("Unsupported expression node: " +
+                                 astKindToString(node.kind));
+    }
+}
+
+void generateCall(const AstNode &node, const SymbolTable &symbols,
+                  CodeGenContext &context, bool asExpression) {
+    const std::string name = lowerCopy(node.text);
+    if (name == "readln" || name == "write" || name == "writeln") {
+        if (asExpression) {
+            throw std::runtime_error(name + " cannot be used as an expression");
+        }
+        generateBuiltinCall(node, symbols, context, name);
+        return;
+    }
+    const TabEntry &callable =
+        symbol(symbols, node.symbolIndex, "Procedure/function call");
+    if (callable.obj != ObjectKind::Procedure &&
+        callable.obj != ObjectKind::Function) {
+        throw std::runtime_error("Identifier is not callable: " + node.text);
+    }
+    if (asExpression && callable.obj != ObjectKind::Function) {
+        throw std::runtime_error("Procedure has no return value: " + node.text);
+    }
+    const std::vector<int> params = parameterSymbols(callable, symbols);
+    if (params.size() != node.children.size()) {
+        throw std::runtime_error("Call argument count mismatch for " + node.text);
+    }
+    int argumentSlots = 0;
+    for (std::size_t i = 0; i < node.children.size(); ++i) {
+        generateExpression(node.children[i], symbols, context);
+        const TabEntry &parameter = symbols.tabEntry(params[i]);
+        argumentSlots +=
+            runtimeTypeSize(parameter.type, parameter.typeRef, symbols);
+    }
+    const int level = lexicalDifference(context, callable);
+    const int instruction =
+        context.emit(OpCode::CAL, level, 0,
+                     std::vector<int>{argumentSlots});
+    context.addCallPatch(node.symbolIndex, instruction);
 }

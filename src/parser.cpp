@@ -130,7 +130,8 @@ bool Parser::looksLikeProcedureOrFunctionCall() const {
 
 bool Parser::canStartConstant(TokenType type) {
     return type == PLUS || type == MINUS || type == IDENT || type == INTCON ||
-           type == REALCON || type == CHARCON || type == STRING;
+           type == REALCON || type == CHARCON || type == STRING ||
+           type == BOOLCON;
 }
 
 ParseNode Parser::parseProgramHeader() {
@@ -208,6 +209,8 @@ ParseNode Parser::parseConstant() {
 
         if (check(IDENT)) {
             node.addChild(consume(IDENT));
+        } else if (check(BOOLCON)) {
+            node.addChild(consume(BOOLCON));
         } else if (check(INTCON)) {
             node.addChild(consume(INTCON));
         } else if (check(REALCON)) {
@@ -835,7 +838,8 @@ ParseNode Parser::parseTerm() {
 ParseNode Parser::parseFactor() {
     ParseNode node("<factor>");
 
-    if (check(INTCON) || check(REALCON) || check(CHARCON) || check(STRING)) {
+    if (check(INTCON) || check(REALCON) || check(CHARCON) || check(STRING) ||
+        check(BOOLCON)) {
         node.addChild(consume(current().type));
     } else if (check(LPARENT)) {
         node.addChild(consume(LPARENT));

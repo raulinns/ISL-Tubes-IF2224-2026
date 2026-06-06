@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -109,7 +110,8 @@ bool isNumeric(TypeKind kind) {
 }
 
 bool isScalar(TypeKind kind) {
-    return kind == TypeKind::Integer || kind == TypeKind::Boolean ||
+    return kind == TypeKind::Integer || kind == TypeKind::Real ||
+           kind == TypeKind::Boolean ||
            kind == TypeKind::Char || kind == TypeKind::Subrange ||
            kind == TypeKind::Enum;
 }
@@ -118,10 +120,6 @@ bool isValidArrayIndexType(TypeKind kind) {
     return kind == TypeKind::Integer || kind == TypeKind::Boolean ||
            kind == TypeKind::Char || kind == TypeKind::Subrange ||
            kind == TypeKind::Enum;
-}
-
-int typeSize(TypeKind kind) {
-    return kind == TypeKind::Real ? 2 : (kind == TypeKind::None ? 0 : 1);
 }
 
 bool parseRangeLiteral(const std::string &literal, int &low, int &high) {
@@ -136,9 +134,9 @@ bool parseRangeLiteral(const std::string &literal, int &low, int &high) {
 TypeInfo typeFromEntry(const TabEntry &entry) {
     TypeInfo type;
     type.kind = entry.type;
-    type.ref = entry.ref;
+    type.ref = entry.typeRef;
     if (entry.type == TypeKind::Subrange) {
-        type.base = static_cast<TypeKind>(entry.ref);
+        type.base = static_cast<TypeKind>(entry.typeRef);
         type.hasRange = parseRangeLiteral(entry.literalValue, type.low, type.high);
     } else if (entry.type == TypeKind::Enum) {
         const std::string basePrefix = "base=";
@@ -179,6 +177,8 @@ class SemanticAnalyzer {
     std::vector<SemanticDiagnostic> diagnostics_;
     int nextEnumRef_ = 1;
     int currentFunctionResultIndex_ = -1;
+    int currentBodyLevel_ = 0;
+    std::unordered_set<int> definitelyInitialized_;
 
     void error(const std::string &message) {
         diagnostics_.push_back({SemanticDiagnostic::Severity::Error, message});
@@ -197,8 +197,13 @@ class SemanticAnalyzer {
     int insertSymbol(const std::string &name, ObjectKind obj, const TypeInfo &type,
                      bool initialized = false, const std::string &literal = "") {
         try {
-            return symbols_.insert(name, obj, type.kind, type.ref, true, 0,
-                                   initialized, literal);
+            const int index =
+                symbols_.insert(name, obj, type.kind, type.ref, true, 0,
+                                initialized, literal);
+            if (initialized) {
+                definitelyInitialized_.insert(index);
+            }
+            return index;
         } catch (const std::exception &e) {
             error(e.what());
             return -1;
@@ -272,12 +277,15 @@ class SemanticAnalyzer {
     }
 
     void visitProcedureDecl(AstNode &node) {
+        const std::unordered_set<int> outerState = definitelyInitialized_;
+        const int outerBodyLevel = currentBodyLevel_;
         TypeInfo none;
         const int outerIndex =
             insertSymbol(node.text, ObjectKind::Procedure, none, true);
         annotate(node, none, outerIndex);
 
         const int blockIndex = symbols_.pushScope(BlockKind::Procedure);
+        currentBodyLevel_ = symbols_.currentLevel();
         if (outerIndex >= 0) {
             symbols_.setReference(outerIndex, blockIndex);
         }
@@ -292,9 +300,13 @@ class SemanticAnalyzer {
             visitStatement(node.children[2]);
         }
         symbols_.popScope();
+        currentBodyLevel_ = outerBodyLevel;
+        definitelyInitialized_ = outerState;
     }
 
     void visitFunctionDecl(AstNode &node) {
+        const std::unordered_set<int> outerState = definitelyInitialized_;
+        const int outerBodyLevel = currentBodyLevel_;
         TypeInfo returnType =
             node.children.size() > 1 ? resolveType(node.children[1]) : TypeInfo{};
         const int outerIndex =
@@ -302,6 +314,7 @@ class SemanticAnalyzer {
         annotate(node, returnType, outerIndex);
 
         const int blockIndex = symbols_.pushScope(BlockKind::Function);
+        currentBodyLevel_ = symbols_.currentLevel();
         if (outerIndex >= 0) {
             symbols_.setReference(outerIndex, blockIndex);
         }
@@ -322,6 +335,8 @@ class SemanticAnalyzer {
             currentFunctionResultIndex_ = previousFunctionResultIndex;
         }
         symbols_.popScope();
+        currentBodyLevel_ = outerBodyLevel;
+        definitelyInitialized_ = outerState;
     }
 
     void visitParameters(AstNode &node) {
@@ -432,7 +447,7 @@ class SemanticAnalyzer {
                                            elementType.ref,
                                            indexType.hasRange ? indexType.low : 0,
                                            indexType.hasRange ? indexType.high : 0,
-                                           typeSize(elementType.kind));
+                                           resolvedTypeSize(elementType));
                 insertedArray = true;
             } catch (const std::exception &e) {
                 error(e.what());
@@ -595,6 +610,7 @@ class SemanticAnalyzer {
             } catch (const std::exception &e) {
                 error(e.what());
             }
+            definitelyInitialized_.insert(target.symbolIndex);
         }
         annotate(node, TypeInfo{});
         return target.symbolIndex >= 0 &&
@@ -606,10 +622,20 @@ class SemanticAnalyzer {
             ExprInfo condition = evalExpression(node.children[0]);
             requireBoolean(condition.type, name + " condition");
         }
+        const std::unordered_set<int> before = definitelyInitialized_;
         const bool thenAssigns =
             node.children.size() > 1 ? visitStatement(node.children[1]) : false;
+        const std::unordered_set<int> thenState = definitelyInitialized_;
+        definitelyInitialized_ = before;
         const bool elseAssigns =
             node.children.size() > 2 ? visitStatement(node.children[2]) : false;
+        const std::unordered_set<int> elseState = definitelyInitialized_;
+        definitelyInitialized_.clear();
+        for (const int index : thenState) {
+            if (elseState.count(index) != 0) {
+                definitelyInitialized_.insert(index);
+            }
+        }
         annotate(node, TypeInfo{});
         return node.children.size() > 2 && thenAssigns && elseAssigns;
     }
@@ -619,9 +645,11 @@ class SemanticAnalyzer {
             ExprInfo condition = evalExpression(node.children[0]);
             requireBoolean(condition.type, name + " condition");
         }
+        const std::unordered_set<int> before = definitelyInitialized_;
         if (node.children.size() > 1) {
             visitStatement(node.children[1]);
         }
+        definitelyInitialized_ = before;
         annotate(node, TypeInfo{});
         return false;
     }
@@ -663,10 +691,13 @@ class SemanticAnalyzer {
         }
         if (counter.symbolIndex >= 0) {
             symbols_.markInitialized(counter.symbolIndex);
+            definitelyInitialized_.insert(counter.symbolIndex);
         }
+        const std::unordered_set<int> afterCounter = definitelyInitialized_;
         if (node.children.size() > 3) {
             visitStatement(node.children[3]);
         }
+        definitelyInitialized_ = afterCounter;
         annotate(node, TypeInfo{});
         return false;
     }
@@ -674,8 +705,12 @@ class SemanticAnalyzer {
     bool visitCase(AstNode &node) {
         ExprInfo selector =
             node.children.empty() ? ExprInfo{} : evalExpression(node.children[0]);
+        const std::unordered_set<int> before = definitelyInitialized_;
+        std::unordered_set<int> intersection;
+        bool hasBranchState = false;
         bool allBranchesAssign = node.children.size() > 1;
         for (std::size_t i = 1; i < node.children.size(); ++i) {
+            definitelyInitialized_ = before;
             AstNode &branch = node.children[i];
             if (branch.children.size() > 0) {
                 for (AstNode &label : branch.children[0].children) {
@@ -691,8 +726,22 @@ class SemanticAnalyzer {
             } else {
                 allBranchesAssign = false;
             }
+            if (!hasBranchState) {
+                intersection = definitelyInitialized_;
+                hasBranchState = true;
+            } else {
+                for (auto it = intersection.begin();
+                     it != intersection.end();) {
+                    if (definitelyInitialized_.count(*it) == 0) {
+                        it = intersection.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
             annotate(branch, TypeInfo{});
         }
+        definitelyInitialized_ = hasBranchState ? intersection : before;
         annotate(node, TypeInfo{});
         return allBranchesAssign;
     }
@@ -785,8 +834,13 @@ class SemanticAnalyzer {
             std::vector<ExprInfo> args;
             checkCallArguments(entry, args);
         }
-        if (!asLValue && entry.obj == ObjectKind::Variable && !entry.initialized) {
-            warning("Variable may be used before initialization: " + node.text);
+        if (!asLValue &&
+            (entry.obj == ObjectKind::Variable ||
+             entry.obj == ObjectKind::Parameter) &&
+            entry.lev == currentBodyLevel_ &&
+            definitelyInitialized_.count(index) == 0) {
+            error("Variable is used before definite initialization: " +
+                  node.text);
         }
         const bool isCurrentFunctionResult =
             entry.obj == ObjectKind::Function && index == currentFunctionResultIndex_;
@@ -979,12 +1033,22 @@ class SemanticAnalyzer {
                     } catch (const std::exception &e) {
                         error(e.what());
                     }
+                    definitelyInitialized_.insert(target.symbolIndex);
+                }
+                if (!isBuiltinIoType(target.type.kind)) {
+                    error("readln only accepts supported scalar variables");
                 }
                 args.push_back(target);
             }
         } else {
             for (AstNode &arg : node.children) {
-                args.push_back(evalExpression(arg));
+                ExprInfo value = evalExpression(arg);
+                if ((normalized == "write" || normalized == "writeln") &&
+                    !isBuiltinIoType(value.type.kind)) {
+                    error(normalized +
+                          " only accepts supported scalar expressions");
+                }
+                args.push_back(value);
             }
         }
 
@@ -1037,6 +1101,23 @@ class SemanticAnalyzer {
                           ? TypeKind::Real
                           : TypeKind::Integer;
         return result;
+    }
+
+    int resolvedTypeSize(const TypeInfo &type) const {
+        if (type.kind == TypeKind::None) {
+            return 0;
+        }
+        if (type.kind == TypeKind::Array) {
+            return symbols_.atabEntry(type.ref).size;
+        }
+        if (type.kind == TypeKind::Record) {
+            return symbols_.btabEntry(type.ref).vsze;
+        }
+        return 1;
+    }
+
+    bool isBuiltinIoType(TypeKind type) const {
+        return isScalar(type) || type == TypeKind::String;
     }
 
     bool sameBaseType(const TypeInfo &left, const TypeInfo &right) const {

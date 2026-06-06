@@ -1,0 +1,10 @@
+program DefiniteAssignment;
+
+var
+  x, y: integer;
+
+begin
+  if true then
+    x := 1;
+  y := x
+end.

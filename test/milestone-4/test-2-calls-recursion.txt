@@ -1,0 +1,38 @@
+program CallsRecursion;
+
+var
+  base: integer;
+
+function fact(n: integer): integer;
+begin
+  if n <= 1 then
+    fact := 1
+  else
+    fact := n * fact(n - 1)
+end;
+
+procedure outer(x: integer);
+var
+  local: integer;
+
+  procedure addbase(y: integer);
+  begin
+    local := y + base
+  end;
+
+begin
+  local := x;
+  addbase(local);
+  writeln(local)
+end;
+
+procedure ping;
+begin
+  writeln(1)
+end;
+
+begin
+  base := 2;
+  outer(fact(4));
+  ping
+end.

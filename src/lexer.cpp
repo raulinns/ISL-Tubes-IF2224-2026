@@ -131,6 +131,8 @@ TokenType Lexer::lookupKeyword(const std::string &lowerWord) {
         return RECORDSY;
     if (lowerWord == "program")
         return PROGRAMSY;
+    if (lowerWord == "true" || lowerWord == "false")
+        return BOOLCON;
 
     return IDENT;
 }
@@ -148,6 +150,8 @@ Token Lexer::readIdentOrKeyword() {
 
     if (type == IDENT) {
         return Token(IDENT, word, startLine);
+    } else if (type == BOOLCON) {
+        return Token(BOOLCON, toLower(word), startLine);
     } else {
         return Token(type, "", startLine);
     }

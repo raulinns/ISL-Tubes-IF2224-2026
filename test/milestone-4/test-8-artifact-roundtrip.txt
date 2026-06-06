@@ -1,0 +1,16 @@
+program ArtifactRoundTrip;
+
+type
+  Pair == record
+    left: integer;
+    right: integer
+  end;
+
+var
+  value: Pair;
+
+begin
+  value.left := 8;
+  value.right := 9;
+  writeln(value.left, value.right)
+end.

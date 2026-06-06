@@ -26,7 +26,13 @@ begin
   writeln(local)
 end;
 
+procedure ping;
+begin
+  writeln(1)
+end;
+
 begin
   base := 2;
-  outer(fact(4))
+  outer(fact(4));
+  ping
 end.

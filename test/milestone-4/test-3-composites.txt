@@ -6,15 +6,42 @@ type
     right: integer
   end;
   PairArray == array[1..2] of Pair;
+  Inner == record
+    first: integer;
+    second: integer
+  end;
+  Outer == record
+    inner: Inner;
+    suffix: integer
+  end;
+  OuterArray == array[1..1] of Outer;
+  Box == record
+    items: PairArray;
+    tag: integer
+  end;
 
 var
   values: PairArray;
   copied: Pair;
+  boxed: Box;
+  nested: OuterArray;
+  returned: PairArray;
   i: integer;
 
 procedure printPair(p: Pair);
 begin
   writeln(p.left, p.right)
+end;
+
+procedure printSecond(items: PairArray);
+begin
+  writeln(items[2].left, items[2].right)
+end;
+
+function makePair(a, b: integer): Pair;
+begin
+  makePair.left := a;
+  makePair.right := b
 end;
 
 begin
@@ -23,5 +50,31 @@ begin
   values[1].right := 20;
   values[i] := values[1];
   copied := values[i];
-  printPair(copied)
+  printPair(copied);
+
+  values[2].left := 3;
+  values[2].right := 4;
+  writeln(values[2].left, values[2].right);
+
+  boxed.items[2].left := 5;
+  boxed.items[2].right := 6;
+  boxed.tag := 7;
+  writeln(boxed.items[2].left, boxed.items[2].right, boxed.tag);
+
+  nested[1].inner.first := 1;
+  nested[1].inner.second := 2;
+  nested[1].suffix := 34;
+  writeln(nested[1].inner.first, nested[1].inner.second, nested[1].suffix);
+
+  values[1].left := 0;
+  values[1].right := 0;
+  values[2].left := 5;
+  values[2].right := 6;
+  printSecond(values);
+
+  copied := makePair(3, 4);
+  writeln(copied.left, copied.right);
+
+  returned[1] := makePair(5, 6);
+  writeln(returned[1].left, returned[1].right)
 end.

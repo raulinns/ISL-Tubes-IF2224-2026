@@ -2,6 +2,7 @@ CXX      := g++
 CXXFLAGS := -std=c++17 -Wall -Wextra -O2 -MMD -MP
 TARGET   := arion
 TEST_TARGET := build/runtime_tests
+DIFF     ?= git diff --no-index --
 SRCDIR   := src
 M4DIR    := $(SRCDIR)/milestone4
 OBJDIR   := build
@@ -89,32 +90,29 @@ test: all $(TEST_TARGET)
 	$(TEST_TARGET); \
 	./$(TARGET) --source test/milestone-4/test-1-memory-assignment.txt build/test-report.txt; \
 	awk '/^----- Intermediate Code -----$$/{seen=1; getline; next} /^----- Program Output -----$$/{seen=0} seen{print}' build/test-report.txt | sed '/^$$/d' > build/test-ic.txt; \
-	diff -u test/milestone-4/expected-ic-1-memory-assignment.txt build/test-ic.txt; \
+	$(DIFF) test/milestone-4/expected-ic-1-memory-assignment.txt build/test-ic.txt; \
 	for n in 2 3 4; do \
 	  input=$$(ls test/milestone-4/test-$$n-*.txt); \
 	  expected=$$(ls test/milestone-4/expected-output-$$n-*.txt); \
 	  ./$(TARGET) --source "$$input" build/test-report.txt; \
 	  awk '/^----- Program Output -----$$/{seen=1; getline; next} seen{print}' build/test-report.txt | sed '/^$$/d' > build/test-output.txt; \
-	  diff -u "$$expected" build/test-output.txt; \
+	  $(DIFF) "$$expected" build/test-output.txt; \
 	done; \
-	printf '2 3.5 x hello true\n' | ./$(TARGET) --source test/milestone-4/test-5-io.txt build/test-report.txt; \
+	printf '42 3.5 A hello true\n' | ./$(TARGET) --source test/milestone-4/test-5-io.txt build/test-report.txt; \
 	awk '/^----- Program Output -----$$/{seen=1; getline; next} seen{print}' build/test-report.txt | sed '/^$$/d' > build/test-output.txt; \
-	diff -u test/milestone-4/expected-output-5-io.txt build/test-output.txt; \
+	$(DIFF) test/milestone-4/expected-output-5-io.txt build/test-output.txt; \
 	! printf 'not-an-integer\n' | ./$(TARGET) --source test/milestone-4/test-5-io.txt >/dev/null 2>build/input-error.txt; \
 	grep -q 'ip .*invalid type' build/input-error.txt; \
 	! ./$(TARGET) --source test/milestone-4/test-6-definite-assignment-error.txt build/semantic-error.txt; \
 	! grep -q '^----- Intermediate Code -----$$' build/semantic-error.txt; \
 	! ./$(TARGET) --source test/milestone-4/test-7-runtime-bounds-error.txt >/dev/null 2>build/runtime-error.txt; \
 	grep -q 'ip .*outside' build/runtime-error.txt; \
-	./$(TARGET) --source test/milestone-4/test-8-composite-function.txt build/test-report.txt; \
-	awk '/^----- Program Output -----$$/{seen=1; getline; next} seen{print}' build/test-report.txt | sed '/^$$/d' > build/test-output.txt; \
-	diff -u test/milestone-4/expected-output-8-composite-function.txt build/test-output.txt; \
-	./$(TARGET) --source test/milestone-4/test-9-zero-argument-call.txt build/test-report.txt; \
-	awk '/^----- Program Output -----$$/{seen=1; getline; next} seen{print}' build/test-report.txt | sed '/^$$/d' > build/test-output.txt; \
-	diff -u test/milestone-4/expected-output-9-zero-argument-call.txt build/test-output.txt; \
-	./$(TARGET) --source test/milestone-4/test-3-composites.txt build/artifact.txt; \
+	./$(TARGET) --source test/milestone-4/test-8-artifact-roundtrip.txt build/artifact.txt; \
 	./$(TARGET) build/artifact.txt build/artifact-roundtrip.txt; \
 	test "$$(grep -c '^----- Intermediate Code -----$$' build/artifact-roundtrip.txt)" -eq 1; \
+	test "$$(grep -c '^----- Program Output -----$$' build/artifact-roundtrip.txt)" -eq 1; \
+	awk '/^----- Program Output -----$$/{seen=1; getline; next} seen{print}' build/artifact-roundtrip.txt | sed '/^$$/d' > build/test-output.txt; \
+	$(DIFF) test/milestone-4/expected-output-8-artifact-roundtrip.txt build/test-output.txt; \
 	for n in 1 2 3 4 5; do \
 	  ./$(TARGET) --source test/milestone-3/test-$$n.txt >/dev/null 2>&1 && rc=0 || rc=$$?; \
 	  case $$n in 1) expected_rc=0;; *) expected_rc=1;; esac; \

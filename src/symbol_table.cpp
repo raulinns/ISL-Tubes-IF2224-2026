@@ -735,6 +735,16 @@ int recordSize(int blockRef, const SymbolTable &symbols) {
     return size;
 }
 
+void normalizeCompositeType(TypeKind type, int ref, SymbolTable &symbols);
+
+void normalizeArray(int arrayRef, SymbolTable &symbols) {
+    ATabEntry &array = symbols.mutableAtabEntry(arrayRef);
+    // An array element can be a record, so calculate its field offsets first before its size.
+    normalizeCompositeType(array.etyp, array.eref, symbols);
+    array.elsz = runtimeTypeSize(array.etyp, array.eref, symbols);
+    array.size = checkedProduct(array.high - array.low + 1, array.elsz);
+}
+
 void normalizeRecord(int blockRef, SymbolTable &symbols) {
     BTabEntry &block = symbols.mutableBtabEntry(blockRef);
     std::vector<int> fields;
@@ -747,18 +757,23 @@ void normalizeRecord(int blockRef, SymbolTable &symbols) {
     int offset = 0;
     for (auto it = fields.rbegin(); it != fields.rend(); ++it) {
         TabEntry &field = symbols.mutableTabEntry(*it);
-        if (field.type == TypeKind::Array && field.typeRef >= 0) {
-            ATabEntry &array = symbols.mutableAtabEntry(field.typeRef);
-            array.elsz = runtimeTypeSize(array.etyp, array.eref, symbols);
-            array.size = checkedProduct(array.high - array.low + 1, array.elsz);
-        } else if (field.type == TypeKind::Record && field.typeRef >= 0) {
-            normalizeRecord(field.typeRef, symbols);
-        }
+        normalizeCompositeType(field.type, field.typeRef, symbols);
         field.adr = offset;
         offset += runtimeTypeSize(field.type, field.typeRef, symbols);
     }
     block.psze = 0;
     block.vsze = offset;
+}
+
+void normalizeCompositeType(TypeKind type, int ref, SymbolTable &symbols) {
+    if (ref < 0) {
+        return;
+    }
+    if (type == TypeKind::Array) {
+        normalizeArray(ref, symbols);
+    } else if (type == TypeKind::Record) {
+        normalizeRecord(ref, symbols);
+    }
 }
 
 int layoutDeclarations(const AstNode &declarations, SymbolTable &symbols,
@@ -778,6 +793,7 @@ void layoutSubprogram(const AstNode &decl, SymbolTable &symbols) {
             }
             TabEntry &entry = symbols.mutableTabEntry(param.symbolIndex);
             entry.adr = offset;
+            normalizeCompositeType(entry.type, entry.typeRef, symbols);
             const int size =
                 runtimeTypeSize(entry.type, entry.typeRef, symbols);
             offset += size;
@@ -787,6 +803,7 @@ void layoutSubprogram(const AstNode &decl, SymbolTable &symbols) {
 
     if (decl.kind == AstKind::FunctionDecl) {
         callable.adr = offset;
+        normalizeCompositeType(callable.type, callable.typeRef, symbols);
         offset += runtimeTypeSize(callable.type, callable.typeRef, symbols);
     }
 
@@ -813,14 +830,7 @@ int layoutDeclarations(const AstNode &declarations, SymbolTable &symbols,
     for (const AstNode &decl : declarations.children) {
         if (decl.kind == AstKind::VarDecl && decl.symbolIndex >= 0) {
             TabEntry &entry = symbols.mutableTabEntry(decl.symbolIndex);
-            if (entry.type == TypeKind::Array && entry.typeRef >= 0) {
-                ATabEntry &array = symbols.mutableAtabEntry(entry.typeRef);
-                array.elsz = runtimeTypeSize(array.etyp, array.eref, symbols);
-                array.size =
-                    checkedProduct(array.high - array.low + 1, array.elsz);
-            } else if (entry.type == TypeKind::Record && entry.typeRef >= 0) {
-                normalizeRecord(entry.typeRef, symbols);
-            }
+            normalizeCompositeType(entry.type, entry.typeRef, symbols);
             entry.adr = offset;
             offset += runtimeTypeSize(entry.type, entry.typeRef, symbols);
         }

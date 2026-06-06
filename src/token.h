@@ -9,6 +9,7 @@ enum TokenType {
     REALCON, // No.2  : Konstanta bilangan riil     contoh: 3.14, 26.7
     CHARCON, // No.3  : Konstanta karakter tunggal  contoh: 'j', 'k'
     STRING,  // No.4  : Sekuens karakter            contoh: 'IRK', 'TBFO'
+    BOOLCON, // Literal boolean                     contoh: true, false
 
     // Identifier
     IDENT, // No.37 : x, PI, MyInt, ...
@@ -100,6 +101,8 @@ inline std::string tokenTypeToString(TokenType t) {
         return "charcon";
     case STRING:
         return "string";
+    case BOOLCON:
+        return "boolcon";
 
     // Operator logika
     case NOTSY:
@@ -227,6 +230,7 @@ inline bool tokenNeedsValue(TokenType t) {
     case REALCON:
     case CHARCON:
     case STRING:
+    case BOOLCON:
     case IDENT:
     case COMMENT:
     case TOKEN_ERROR:

@@ -30,6 +30,9 @@ class RuntimeStack {
     const RuntimeValue &readAt(int address) const;
     RuntimeValue &readAt(int address);
     void writeAt(int address, const RuntimeValue &value);
+    int resolveAddress(int level, int address) const;
+    const RuntimeValue &readAt(int level, int address) const;
+    void writeAt(int level, int address, const RuntimeValue &value);
 
     void pushValue(const RuntimeValue &value);
     RuntimeValue popValue();
@@ -43,6 +46,7 @@ class RuntimeStack {
     bool hasFrame() const;
     const StackFrame &currentFrame() const;
     int currentBaseAddress() const;
+    int currentFloorAddress() const;
     std::size_t frameCount() const;
     std::size_t maxFrameCount() const;
 

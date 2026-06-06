@@ -26,13 +26,23 @@ void RuntimeStack::reserveSlots(int slotCount) {
         throw std::invalid_argument("RuntimeStack slot count cannot be negative");
     }
 
-    if (!frames_.empty()) {
-        throw std::logic_error(
-            "reserveSlots() is only intended for the current top-level frame");
+    if (frames_.empty()) {
+        topLevelFloor_ = slotCount;
+        resizeToAtLeast(slotCount);
+        return;
     }
 
-    topLevelFloor_ = slotCount;
-    resizeToAtLeast(slotCount);
+    StackFrame &frame = frames_.back();
+    if (slotCount <= frame.slotCount) {
+        frame.slotCount = slotCount;
+        return;
+    }
+
+    const int oldFloor = currentFloor();
+    const int addedSlots = slotCount - frame.slotCount;
+    memory_.insert(memory_.begin() + oldFloor, static_cast<std::size_t>(addedSlots),
+                   RuntimeValue());
+    frame.slotCount = slotCount;
 }
 
 int RuntimeStack::allocateSlot() {
@@ -66,6 +76,29 @@ RuntimeValue &RuntimeStack::readAt(int address) {
 void RuntimeStack::writeAt(int address, const RuntimeValue &value) {
     validateAddress(address);
     memory_[static_cast<std::size_t>(address)] = value;
+}
+
+int RuntimeStack::resolveAddress(int level, int address) const {
+    if (level == 0) {
+        return address;
+    }
+    if (level == 1) {
+        if (frames_.empty()) {
+            throw ArionRuntimeError(
+                "Frame-relative address access requires an active stack frame");
+        }
+        return frames_.back().baseAddress + address;
+    }
+    throw ArionRuntimeError("Unsupported runtime address mode: " +
+                            std::to_string(level));
+}
+
+const RuntimeValue &RuntimeStack::readAt(int level, int address) const {
+    return readAt(resolveAddress(level, address));
+}
+
+void RuntimeStack::writeAt(int level, int address, const RuntimeValue &value) {
+    writeAt(resolveAddress(level, address), value);
 }
 
 void RuntimeStack::pushValue(const RuntimeValue &value) {
@@ -144,6 +177,8 @@ const StackFrame &RuntimeStack::currentFrame() const {
 int RuntimeStack::currentBaseAddress() const {
     return frames_.empty() ? 0 : frames_.back().baseAddress;
 }
+
+int RuntimeStack::currentFloorAddress() const { return currentFloor(); }
 
 std::size_t RuntimeStack::frameCount() const { return frames_.size(); }
 

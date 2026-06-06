@@ -106,6 +106,7 @@ class SymbolTable {
     std::string renderBTab() const;
     std::string renderATab() const;
     std::string renderAll() const;
+    void loadRenderedAll(const std::string &text);
 
     static std::string normalizeIdentifier(const std::string &name);
 
@@ -125,7 +126,10 @@ class SymbolTable {
 };
 
 std::string objectKindToString(ObjectKind kind);
+ObjectKind objectKindFromString(const std::string &name);
 std::string typeKindToString(TypeKind kind);
+TypeKind typeKindFromString(const std::string &name);
 std::string blockKindToString(BlockKind kind);
+BlockKind blockKindFromString(const std::string &name);
 
 #endif // SYMBOL_TABLE_H

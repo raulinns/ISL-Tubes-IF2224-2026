@@ -80,7 +80,7 @@ int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
     if (!context.hasRuntimeAddress(node.symbolIndex)) {
         context.allocateRuntimeAddress(node.symbolIndex);
     }
-    return context.runtimeAddressOf(node.symbolIndex);
+    return node.symbolIndex;
 }
 
 void generateIdentifierExpression(const AstNode &node, const SymbolTable &symbols,
@@ -94,8 +94,9 @@ void generateIdentifierExpression(const AstNode &node, const SymbolTable &symbol
     }
 
     if (entry.obj == ObjectKind::Variable || entry.obj == ObjectKind::Parameter) {
-        const int address = scalarAddressForVariable(node, symbols, context);
-        context.emit(OpCode::LOD, 0, address);
+        const int symbolIndex = scalarAddressForVariable(node, symbols, context);
+        context.emit(OpCode::LOD, context.runtimeLevelOf(symbolIndex),
+                     context.runtimeAddressOf(symbolIndex));
         return;
     }
 
@@ -218,8 +219,9 @@ void generateExpression(const AstNode &node, const SymbolTable &symbols,
         generateIdentifierExpression(node, symbols, context);
         return;
     case AstKind::Variable: {
-        const int address = scalarAddressForVariable(node, symbols, context);
-        context.emit(OpCode::LOD, 0, address);
+        const int symbolIndex = scalarAddressForVariable(node, symbols, context);
+        context.emit(OpCode::LOD, context.runtimeLevelOf(symbolIndex),
+                     context.runtimeAddressOf(symbolIndex));
         return;
     }
     case AstKind::UnaryExpr:

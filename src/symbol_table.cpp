@@ -5,6 +5,8 @@
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace {
 
@@ -37,6 +39,42 @@ int typeSize(TypeKind type) {
 
 void appendTableDivider(std::ostringstream &out, int width) {
     out << std::string(width, '-') << "\n";
+}
+
+std::string trim(const std::string &text) {
+    const std::size_t first = text.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) {
+        return "";
+    }
+    const std::size_t last = text.find_last_not_of(" \t\r\n");
+    return text.substr(first, last - first + 1);
+}
+
+std::vector<std::string> splitLines(const std::string &text) {
+    std::vector<std::string> lines;
+    std::istringstream input(text);
+    std::string line;
+    while (std::getline(input, line)) {
+        lines.push_back(line);
+    }
+    return lines;
+}
+
+std::string sliceColumn(const std::string &line, std::size_t start,
+                        std::size_t width) {
+    if (start >= line.size()) {
+        return "";
+    }
+    return trim(line.substr(start, width));
+}
+
+int parseIntColumn(const std::string &line, std::size_t start, std::size_t width) {
+    const std::string value = sliceColumn(line, start, width);
+    return value.empty() ? 0 : std::stoi(value);
+}
+
+bool parseBoolColumn(const std::string &line, std::size_t start, std::size_t width) {
+    return parseIntColumn(line, start, width) != 0;
 }
 
 } // namespace
@@ -334,6 +372,137 @@ std::string SymbolTable::renderAll() const {
     return out.str();
 }
 
+void SymbolTable::loadRenderedAll(const std::string &text) {
+    const std::vector<std::string> lines = splitLines(text);
+    std::size_t index = 0;
+
+    auto skipBlankLines = [&]() {
+        while (index < lines.size() && trim(lines[index]).empty()) {
+            ++index;
+        }
+    };
+    auto skipDivider = [&]() {
+        if (index < lines.size() &&
+            trim(lines[index]).find_first_not_of('-') == std::string::npos) {
+            ++index;
+        }
+    };
+
+    skipBlankLines();
+    if (index >= lines.size() || trim(lines[index]) != "tab") {
+        throw std::runtime_error("Rendered symbol table must start with tab section");
+    }
+    ++index;
+    skipDivider();
+    if (index >= lines.size()) {
+        throw std::runtime_error("Missing tab header row");
+    }
+    ++index;
+    skipDivider();
+
+    std::vector<TabEntry> parsedTab;
+    while (index < lines.size()) {
+        const std::string line = lines[index];
+        const std::string trimmed = trim(line);
+        if (trimmed.empty()) {
+            ++index;
+            break;
+        }
+        if (trimmed == "btab") {
+            break;
+        }
+
+        TabEntry entry;
+        entry.identifier = sliceColumn(line, 5, 18);
+        entry.obj = objectKindFromString(sliceColumn(line, 23, 12));
+        entry.type = typeKindFromString(sliceColumn(line, 35, 10));
+        entry.ref = parseIntColumn(line, 45, 6);
+        entry.nrm = parseBoolColumn(line, 51, 6);
+        entry.lev = parseIntColumn(line, 57, 6);
+        entry.adr = parseIntColumn(line, 63, 6);
+        entry.link = parseIntColumn(line, 69, 6);
+        entry.initialized = parseBoolColumn(line, 75, 7);
+        entry.literalValue =
+            line.size() > 82 ? trim(line.substr(82)) : std::string();
+        parsedTab.push_back(entry);
+        ++index;
+    }
+
+    skipBlankLines();
+    if (index >= lines.size() || trim(lines[index]) != "btab") {
+        throw std::runtime_error("Rendered symbol table is missing btab section");
+    }
+    ++index;
+    skipDivider();
+    if (index >= lines.size()) {
+        throw std::runtime_error("Missing btab header row");
+    }
+    ++index;
+    skipDivider();
+
+    std::vector<BTabEntry> parsedBtab;
+    while (index < lines.size()) {
+        const std::string line = lines[index];
+        const std::string trimmed = trim(line);
+        if (trimmed.empty()) {
+            ++index;
+            break;
+        }
+        if (trimmed == "atab") {
+            break;
+        }
+
+        BTabEntry entry;
+        entry.kind = blockKindFromString(sliceColumn(line, 5, 12));
+        entry.last = parseIntColumn(line, 17, 7);
+        entry.lpar = parseIntColumn(line, 24, 7);
+        entry.psze = parseIntColumn(line, 31, 7);
+        entry.vsze = parseIntColumn(line, 38, 10);
+        parsedBtab.push_back(entry);
+        ++index;
+    }
+
+    skipBlankLines();
+    if (index >= lines.size() || trim(lines[index]) != "atab") {
+        throw std::runtime_error("Rendered symbol table is missing atab section");
+    }
+    ++index;
+    skipDivider();
+    if (index >= lines.size()) {
+        throw std::runtime_error("Missing atab header row");
+    }
+    ++index;
+    skipDivider();
+
+    std::vector<ATabEntry> parsedAtab;
+    while (index < lines.size()) {
+        const std::string line = lines[index];
+        const std::string trimmed = trim(line);
+        if (trimmed.empty()) {
+            ++index;
+            continue;
+        }
+
+        ATabEntry entry;
+        entry.xtyp = typeKindFromString(sliceColumn(line, 5, 10));
+        entry.etyp = typeKindFromString(sliceColumn(line, 15, 10));
+        entry.eref = parseIntColumn(line, 25, 7);
+        entry.low = parseIntColumn(line, 32, 7);
+        entry.high = parseIntColumn(line, 39, 7);
+        entry.elsz = parseIntColumn(line, 46, 7);
+        entry.size = parseIntColumn(line, 53, 9);
+        parsedAtab.push_back(entry);
+        ++index;
+    }
+
+    tab_ = std::move(parsedTab);
+    btab_ = std::move(parsedBtab);
+    atab_ = std::move(parsedAtab);
+    display_.clear();
+    display_.push_back(0);
+    currentLevel_ = 0;
+}
+
 std::string SymbolTable::normalizeIdentifier(const std::string &name) {
     std::string normalized = name;
     std::transform(normalized.begin(), normalized.end(), normalized.begin(),
@@ -372,6 +541,40 @@ std::string objectKindToString(ObjectKind kind) {
     return "unknown";
 }
 
+ObjectKind objectKindFromString(const std::string &name) {
+    if (name == "none") {
+        return ObjectKind::None;
+    }
+    if (name == "reserved") {
+        return ObjectKind::Reserved;
+    }
+    if (name == "constant") {
+        return ObjectKind::Constant;
+    }
+    if (name == "variable") {
+        return ObjectKind::Variable;
+    }
+    if (name == "type") {
+        return ObjectKind::Type;
+    }
+    if (name == "procedure") {
+        return ObjectKind::Procedure;
+    }
+    if (name == "function") {
+        return ObjectKind::Function;
+    }
+    if (name == "program") {
+        return ObjectKind::Program;
+    }
+    if (name == "field") {
+        return ObjectKind::Field;
+    }
+    if (name == "parameter") {
+        return ObjectKind::Parameter;
+    }
+    throw std::runtime_error("Unknown object kind: " + name);
+}
+
 std::string typeKindToString(TypeKind kind) {
     switch (kind) {
     case TypeKind::None:
@@ -399,6 +602,40 @@ std::string typeKindToString(TypeKind kind) {
     return "unknown";
 }
 
+TypeKind typeKindFromString(const std::string &name) {
+    if (name == "none") {
+        return TypeKind::None;
+    }
+    if (name == "integer") {
+        return TypeKind::Integer;
+    }
+    if (name == "real") {
+        return TypeKind::Real;
+    }
+    if (name == "char") {
+        return TypeKind::Char;
+    }
+    if (name == "boolean") {
+        return TypeKind::Boolean;
+    }
+    if (name == "string") {
+        return TypeKind::String;
+    }
+    if (name == "array") {
+        return TypeKind::Array;
+    }
+    if (name == "record") {
+        return TypeKind::Record;
+    }
+    if (name == "subrange") {
+        return TypeKind::Subrange;
+    }
+    if (name == "enum") {
+        return TypeKind::Enum;
+    }
+    throw std::runtime_error("Unknown type kind: " + name);
+}
+
 std::string blockKindToString(BlockKind kind) {
     switch (kind) {
     case BlockKind::Program:
@@ -414,4 +651,23 @@ std::string blockKindToString(BlockKind kind) {
     }
 
     return "unknown";
+}
+
+BlockKind blockKindFromString(const std::string &name) {
+    if (name == "program") {
+        return BlockKind::Program;
+    }
+    if (name == "procedure") {
+        return BlockKind::Procedure;
+    }
+    if (name == "function") {
+        return BlockKind::Function;
+    }
+    if (name == "record") {
+        return BlockKind::Record;
+    }
+    if (name == "compound") {
+        return BlockKind::Compound;
+    }
+    throw std::runtime_error("Unknown block kind: " + name);
 }

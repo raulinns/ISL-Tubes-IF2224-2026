@@ -19,10 +19,12 @@
 #include <utility>
 #include <vector>
 
+namespace {
+
 // printUsage: menampilkan cara pemakaian program ke stderr
 static void printUsage(const char *programName) {
     std::cerr << "Penggunaan: " << programName << " <input.txt> [output.txt]\n"
-              << "  input.txt   : file source code bahasa Arion\n"
+              << "  input.txt   : source code Arion atau laporan Decorated AST\n"
               << "  output.txt  : (opsional) file output analisis\n"
               << "                Jika tidak diberikan, output analisis ke terminal\n";
 }
@@ -95,6 +97,38 @@ static bool looksLikeParseTreeInput(const std::string &text) {
     return trimmed.rfind("<program>", 0) == 0;
 }
 
+static bool looksLikeDecoratedAstInput(const std::string &text) {
+    const std::string trimmed = ltrimCopy(text);
+    return trimmed.rfind("Program(", 0) == 0 ||
+           trimmed.rfind("----- Decorated AST -----", 0) == 0;
+}
+
+static std::string extractSection(const std::string &text, const std::string &start,
+                                  const std::string &end) {
+    const std::size_t begin = text.find(start);
+    if (begin == std::string::npos) {
+        return "";
+    }
+
+    std::size_t bodyStart = begin + start.size();
+    while (bodyStart < text.size() &&
+           (text[bodyStart] == '\r' || text[bodyStart] == '\n')) {
+        ++bodyStart;
+    }
+
+    std::size_t finish = text.size();
+    if (!end.empty()) {
+        const std::size_t foundEnd = text.find(end, bodyStart);
+        if (foundEnd != std::string::npos) {
+            finish = foundEnd;
+        }
+    }
+
+    return text.substr(bodyStart, finish - bodyStart);
+}
+
+} // namespace
+
 // main
 int main(int argc, char *argv[]) {
     // 1. Validasi argumen
@@ -106,30 +140,69 @@ int main(int argc, char *argv[]) {
     const std::string inputFile = argv[1];
     const std::string outputFile = (argc == 3) ? argv[2] : "";
 
-    ParseNode parseTreeNode("<empty>");
     AstNode ast(AstKind::Program);
-    SemanticResult semantic{AstNode(AstKind::Program), SymbolTable(), {}};
+    SymbolTable symbols;
+    std::vector<SemanticDiagnostic> diagnostics;
+    std::string diagnosticsText = "No semantic diagnostics.\n";
+    bool semanticOk = true;
 
     try {
         const std::string inputText = readWholeFile(inputFile);
-        if (looksLikeParseTreeInput(inputText)) {
-            parseTreeNode = parseRenderedParseTree(inputText);
-        } else {
-            // 2. Jalankan Lexer
-            Lexer lexer(inputFile);
-            std::vector<Token> tokens = lexer.tokenize();
+        if (looksLikeDecoratedAstInput(inputText)) {
+            const bool hasReport =
+                inputText.find("----- Decorated AST -----") != std::string::npos;
+            const std::string astText =
+                hasReport
+                    ? extractSection(inputText, "----- Decorated AST -----",
+                                     "----- Symbol Table -----")
+                    : inputText;
+            ast = parseRenderedAst(astText);
 
-            // 3. Laporkan error leksikal (jika ada) ke stderr
-            reportErrors(tokens);
-
-            if (hasLexicalError(tokens)) {
-                std::cerr << "[ERROR] Parsing dibatalkan karena masih ada token "
-                             "leksikal tidak valid.\n";
-                return EXIT_FAILURE;
+            if (!hasReport) {
+                throw std::runtime_error(
+                    "Decorated AST input for Milestone 4 harus menyertakan Symbol Table.");
             }
 
-            Parser parser(tokens);
-            parseTreeNode = parser.parseProgram();
+            const std::string symbolText =
+                extractSection(inputText, "----- Symbol Table -----",
+                               "----- Semantic Diagnostics -----");
+            symbols.loadRenderedAll(symbolText);
+
+            const std::string extractedDiagnostics =
+                extractSection(inputText, "----- Semantic Diagnostics -----", "");
+            if (!ltrimCopy(extractedDiagnostics).empty()) {
+                diagnosticsText = extractedDiagnostics;
+            }
+            semanticOk = diagnosticsText.find("error:") == std::string::npos;
+        } else {
+            ParseNode parseTreeNode("<empty>");
+            if (looksLikeParseTreeInput(inputText)) {
+                parseTreeNode = parseRenderedParseTree(inputText);
+            } else {
+                // 2. Jalankan Lexer
+                Lexer lexer(inputFile);
+                std::vector<Token> tokens = lexer.tokenize();
+
+                // 3. Laporkan error leksikal (jika ada) ke stderr
+                reportErrors(tokens);
+
+                if (hasLexicalError(tokens)) {
+                    std::cerr << "[ERROR] Parsing dibatalkan karena masih ada token "
+                                 "leksikal tidak valid.\n";
+                    return EXIT_FAILURE;
+                }
+
+                Parser parser(tokens);
+                parseTreeNode = parser.parseProgram();
+            }
+
+            ast = buildAstFromParseTree(parseTreeNode);
+            SemanticResult semantic = analyzeSemantics(std::move(ast));
+            ast = std::move(semantic.ast);
+            symbols = std::move(semantic.symbols);
+            diagnostics = std::move(semantic.diagnostics);
+            diagnosticsText = formatSemanticDiagnostics(diagnostics);
+            semanticOk = semantic.ok();
         }
     } catch (const std::runtime_error &e) {
         std::cerr << "[ERROR] " << e.what() << "\n";
@@ -139,35 +212,21 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    try {
-        ast = buildAstFromParseTree(parseTreeNode);
-    } catch (const std::exception &e) {
-        std::cerr << "[AST] " << e.what() << "\n";
-        return EXIT_FAILURE;
-    }
-    
-    try {
-        semantic = analyzeSemantics(std::move(ast));
-    } catch (const std::exception &e) {
-        std::cerr << "[SEMANTIC] " << e.what() << "\n";
-        return EXIT_FAILURE;
-    }
-
     bool milestone4Ok = true;
     std::ostringstream output;
     output << "----- Decorated AST -----\n\n";
-    output << renderAst(semantic.ast);
+    output << renderAst(ast);
 
     output << "\n----- Symbol Table -----\n\n";
-    output << semantic.symbols.renderAll();
+    output << symbols.renderAll();
 
     output << "\n----- Semantic Diagnostics -----\n\n";
-    output << formatSemanticDiagnostics(semantic.diagnostics);
+    output << diagnosticsText;
 
-    if (semantic.ok()) {
+    if (semanticOk) {
         try {
             const CodeGeneratorResult generated =
-                generateIntermediateCode(semantic.ast, semantic.symbols);
+                generateIntermediateCode(ast, symbols);
             output << "\n----- Intermediate Code -----\n\n";
             output << renderIntermediateCode(generated.code);
 
@@ -197,7 +256,7 @@ int main(int argc, char *argv[]) {
         out << outputText;
         out.close();
 
-        if (semantic.ok()) {
+        if (semanticOk) {
             std::cout << "[OK] Analisis selesai. Output ditulis ke '"
                       << outputFile << "'\n";
         } else {
@@ -206,5 +265,5 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    return semantic.ok() && milestone4Ok ? EXIT_SUCCESS : EXIT_FAILURE;
+    return semanticOk && milestone4Ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

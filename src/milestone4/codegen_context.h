@@ -6,6 +6,11 @@
 #include <unordered_map>
 #include <vector>
 
+struct RuntimeAddressBinding {
+    int level;
+    int address;
+};
+
 class CodeGenContext {
   public:
     static constexpr int kFrameHeaderSize = 3;
@@ -21,11 +26,18 @@ class CodeGenContext {
     void patch(int instructionIndex, int targetLine);
 
     int nextInstructionIndex() const;
-    int frameSize() const;
+    int globalFrameSize() const;
+    int frameSizeForSubprogram(int symbolIndex) const;
+    void bindFrameSizeForSubprogram(int symbolIndex, int frameSize);
+    void beginGlobalLayout();
+    void endGlobalLayout();
+    void beginFrameLayout();
+    int endFrameLayout();
 
     bool hasRuntimeAddress(int symbolIndex) const;
     int runtimeAddressOf(int symbolIndex) const;
-    void bindRuntimeAddress(int symbolIndex, int runtimeAddress);
+    int runtimeLevelOf(int symbolIndex) const;
+    void bindRuntimeAddress(int symbolIndex, int runtimeLevel, int runtimeAddress);
     int allocateRuntimeAddress(int symbolIndex);
 
     bool hasSubprogramEntry(int symbolIndex) const;
@@ -37,9 +49,12 @@ class CodeGenContext {
 
   private:
     std::vector<Instruction> code_;
-    std::unordered_map<int, int> runtimeAddressBySymbol_;
+    std::unordered_map<int, RuntimeAddressBinding> runtimeAddressBySymbol_;
     std::unordered_map<int, int> subprogramEntryBySymbol_;
-    int nextRuntimeAddress_;
+    std::unordered_map<int, int> frameSizeBySubprogram_;
+    int nextGlobalAddress_;
+    int nextFrameAddress_;
+    bool frameLayoutActive_;
 };
 
 #endif // CODEGEN_CONTEXT_H

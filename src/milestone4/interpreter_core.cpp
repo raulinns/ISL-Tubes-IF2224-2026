@@ -160,18 +160,28 @@ void executeInstruction(Interpreter &interpreter,
         interpreter.advance();
         return;
     case OpCode::LOD:
-        interpreter.stack().pushValue(interpreter.stack().readAt(instruction.arg));
+        interpreter.stack().pushValue(
+            interpreter.stack().readAt(instruction.level, instruction.arg));
         interpreter.advance();
         return;
     case OpCode::STO: {
         RuntimeValue value = interpreter.stack().popValue();
-        interpreter.stack().writeAt(instruction.arg, value);
+        interpreter.stack().writeAt(instruction.level, instruction.arg, value);
         interpreter.advance();
         return;
     }
     case OpCode::RET:
         if (interpreter.stack().hasFrame()) {
+            RuntimeValue returnValue;
+            const bool hasReturnValue = instruction.arg >= 0;
+            if (hasReturnValue) {
+                returnValue =
+                    interpreter.stack().readAt(1, instruction.arg);
+            }
             const StackFrame frame = interpreter.stack().popFrame();
+            if (hasReturnValue) {
+                interpreter.stack().pushValue(returnValue);
+            }
             interpreter.setInstructionPointer(frame.returnAddress);
             return;
         }
@@ -182,7 +192,8 @@ void executeInstruction(Interpreter &interpreter,
             throw InvalidJumpTargetError("Invalid call target: " +
                                          std::to_string(instruction.arg));
         }
-        interpreter.stack().pushFrame(interpreter.stack().memorySize(), 0, 0,
+        interpreter.stack().pushFrame(interpreter.stack().currentFloorAddress(), 0,
+                                      interpreter.stack().currentBaseAddress(),
                                       interpreter.instructionPointer() + 1, 0);
         interpreter.setInstructionPointer(instruction.arg);
         return;

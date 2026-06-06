@@ -76,7 +76,7 @@ int scalarAddressForReadTarget(const AstNode &node, const SymbolTable &symbols,
         context.allocateRuntimeAddress(node.symbolIndex);
     }
     declaredType = typeKindToString(entry.type);
-    return context.runtimeAddressOf(node.symbolIndex);
+    return node.symbolIndex;
 }
 
 void emitWriteCall(const AstNode &node, const SymbolTable &symbols,
@@ -108,11 +108,13 @@ void emitReadlnCall(const AstNode &node, const SymbolTable &symbols,
 
     for (const AstNode &arg : node.children) {
         std::string declaredType;
-        const int address =
+        const int symbolIndex =
             scalarAddressForReadTarget(arg, symbols, context, declaredType);
-        context.emit(Instruction(OpCode::OPR, address,
+        context.emit(Instruction(OpCode::OPR, context.runtimeLevelOf(symbolIndex),
                                  static_cast<int>(OprCode::READLN),
-                                 declaredType, "readln"));
+                                 declaredType,
+                                 "readln " +
+                                     std::to_string(context.runtimeAddressOf(symbolIndex))));
     }
 }
 
@@ -161,13 +163,8 @@ void generateCall(const AstNode &node, const SymbolTable &symbols,
     if (params.size() != node.children.size()) {
         throw std::runtime_error("Call argument count mismatch for " + node.text);
     }
-    for (std::size_t i = 0; i < node.children.size(); ++i) {
-        generateExpression(node.children[i], symbols, context);
-        if (!context.hasRuntimeAddress(params[i])) {
-            context.allocateRuntimeAddress(params[i]);
-        }
-        context.emit(OpCode::STO, 0, context.runtimeAddressOf(params[i]),
-                     "argument " + std::to_string(i + 1));
+    for (const AstNode &arg : node.children) {
+        generateExpression(arg, symbols, context);
     }
 
     if (!context.hasSubprogramEntry(callSymbol)) {
@@ -176,14 +173,4 @@ void generateCall(const AstNode &node, const SymbolTable &symbols,
     }
     context.emit(OpCode::CAL, 0, context.subprogramEntryOf(callSymbol),
                  "call " + callable.identifier);
-
-    if (callable.obj == ObjectKind::Function) {
-        if (!context.hasRuntimeAddress(callSymbol)) {
-            context.allocateRuntimeAddress(callSymbol);
-        }
-        if (asExpression) {
-            context.emit(OpCode::LOD, 0, context.runtimeAddressOf(callSymbol),
-                         "function result " + callable.identifier);
-        }
-    }
 }

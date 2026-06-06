@@ -4,6 +4,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -51,6 +52,20 @@ bool hasSubprogramDeclarations(const AstNode &node) {
     return false;
 }
 
+std::vector<int> parameterSymbolsFromDecl(const AstNode &decl) {
+    std::vector<int> params;
+    if (decl.children.empty() || decl.children[0].kind != AstKind::Parameters) {
+        return params;
+    }
+
+    for (const AstNode &param : decl.children[0].children) {
+        if (param.kind == AstKind::ParameterDecl && param.symbolIndex >= 0) {
+            params.push_back(param.symbolIndex);
+        }
+    }
+    return params;
+}
+
 void allocateParameterStorage(const AstNode &node, CodeGenContext &context) {
     if (node.kind != AstKind::Parameters) {
         return;
@@ -65,6 +80,8 @@ void allocateParameterStorage(const AstNode &node, CodeGenContext &context) {
 
 void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
                                CodeGenContext &context);
+void generateDeclarations(const AstNode &node, const SymbolTable &symbols,
+                          CodeGenContext &context);
 
 void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
                           CodeGenContext &context) {
@@ -98,6 +115,8 @@ void allocateDeclarations(const AstNode &node, const SymbolTable &symbols,
 
 void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
                                CodeGenContext &context) {
+    context.beginFrameLayout();
+
     if (decl.kind == AstKind::FunctionDecl) {
         context.allocateRuntimeAddress(decl.symbolIndex);
     }
@@ -111,6 +130,8 @@ void allocateSubprogramStorage(const AstNode &decl, const SymbolTable &symbols,
     if (decl.children.size() > declarationsIndex) {
         allocateDeclarations(decl.children[declarationsIndex], symbols, context);
     }
+
+    context.bindFrameSizeForSubprogram(decl.symbolIndex, context.endFrameLayout());
 }
 
 int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
@@ -132,7 +153,7 @@ int scalarAddressForVariable(const AstNode &node, const SymbolTable &symbols,
     if (!context.hasRuntimeAddress(node.symbolIndex)) {
         context.allocateRuntimeAddress(node.symbolIndex);
     }
-    return context.runtimeAddressOf(node.symbolIndex);
+    return node.symbolIndex;
 }
 
 void generateSubprogramDeclaration(const AstNode &decl, const SymbolTable &symbols,
@@ -143,12 +164,34 @@ void generateSubprogramDeclaration(const AstNode &decl, const SymbolTable &symbo
 
     context.bindSubprogramEntry(decl.symbolIndex, context.nextInstructionIndex());
 
+    const std::size_t declarationsIndex =
+        decl.kind == AstKind::FunctionDecl ? 2U : 1U;
+    if (decl.children.size() > declarationsIndex &&
+        hasSubprogramDeclarations(decl.children[declarationsIndex])) {
+        const int bodyJump =
+            context.emit(OpCode::JMP, 0, 0, "body entry " + decl.text);
+        generateDeclarations(decl.children[declarationsIndex], symbols, context);
+        context.patch(bodyJump, context.nextInstructionIndex());
+    }
+
+    context.emit(OpCode::INT, 0, context.frameSizeForSubprogram(decl.symbolIndex),
+                 "enter " + decl.text);
+    const std::vector<int> params = parameterSymbolsFromDecl(decl);
+    for (auto it = params.rbegin(); it != params.rend(); ++it) {
+        context.emit(OpCode::STO, context.runtimeLevelOf(*it),
+                     context.runtimeAddressOf(*it),
+                     "param " + std::to_string(*it));
+    }
+
     const std::size_t bodyIndex = decl.kind == AstKind::FunctionDecl ? 3U : 2U;
     if (decl.children.size() > bodyIndex) {
         generateStatement(decl.children[bodyIndex], symbols, context);
     }
 
-    context.emit(OpCode::RET, 0, 0, "return " + decl.text);
+    const int returnOffset = decl.kind == AstKind::FunctionDecl
+                                 ? context.runtimeAddressOf(decl.symbolIndex)
+                                 : -1;
+    context.emit(OpCode::RET, 0, returnOffset, "return " + decl.text);
 }
 
 void generateDeclarations(const AstNode &node, const SymbolTable &symbols,
@@ -180,8 +223,10 @@ void generateAssignment(const AstNode &node, const SymbolTable &symbols,
     }
 
     generateExpression(node.children[1], symbols, context);
-    const int address = scalarAddressForVariable(node.children[0], symbols, context);
-    context.emit(OpCode::STO, 0, address);
+    const int symbolIndex =
+        scalarAddressForVariable(node.children[0], symbols, context);
+    context.emit(OpCode::STO, context.runtimeLevelOf(symbolIndex),
+                 context.runtimeAddressOf(symbolIndex));
 }
 
 void emitOpr(CodeGenContext &context, OprCode op,
@@ -250,14 +295,16 @@ void generateForStatement(const AstNode &node, const SymbolTable &symbols,
         throw std::runtime_error("Unsupported for direction: " + node.text);
     }
 
-    const int counterAddress =
+    const int counterSymbol =
         scalarAddressForVariable(node.children[0], symbols, context);
 
     generateExpression(node.children[1], symbols, context);
-    context.emit(OpCode::STO, 0, counterAddress, "for init");
+    context.emit(OpCode::STO, context.runtimeLevelOf(counterSymbol),
+                 context.runtimeAddressOf(counterSymbol), "for init");
 
     const int start = context.nextInstructionIndex();
-    context.emit(OpCode::LOD, 0, counterAddress, "for counter");
+    context.emit(OpCode::LOD, context.runtimeLevelOf(counterSymbol),
+                 context.runtimeAddressOf(counterSymbol), "for counter");
     generateExpression(node.children[2], symbols, context);
     emitOpr(context, isTo ? OprCode::LEQ : OprCode::GEQ,
             isTo ? "for to" : "for downto");
@@ -265,11 +312,13 @@ void generateForStatement(const AstNode &node, const SymbolTable &symbols,
 
     generateStatement(node.children[3], symbols, context);
 
-    context.emit(OpCode::LOD, 0, counterAddress, "for counter");
+    context.emit(OpCode::LOD, context.runtimeLevelOf(counterSymbol),
+                 context.runtimeAddressOf(counterSymbol), "for counter");
     context.emit(OpCode::LIT, 0, 1, "for step");
     emitOpr(context, isTo ? OprCode::ADD : OprCode::SUB,
             isTo ? "for increment" : "for decrement");
-    context.emit(OpCode::STO, 0, counterAddress, "for update");
+    context.emit(OpCode::STO, context.runtimeLevelOf(counterSymbol),
+                 context.runtimeAddressOf(counterSymbol), "for update");
     context.emit(OpCode::JMP, 0, start, "for repeat");
     context.patch(exitJump, context.nextInstructionIndex());
 }
@@ -323,10 +372,12 @@ void generateProgram(const AstNode &decoratedAst, const SymbolTable &symbols,
     }
 
     context.reset();
+    context.beginGlobalLayout();
 
     if (!decoratedAst.children.empty()) {
         allocateDeclarations(decoratedAst.children[0], symbols, context);
     }
+    context.endGlobalLayout();
 
     int mainJump = -1;
     if (!decoratedAst.children.empty() &&
@@ -336,13 +387,13 @@ void generateProgram(const AstNode &decoratedAst, const SymbolTable &symbols,
         context.patch(mainJump, context.nextInstructionIndex());
     }
 
-    context.emit(OpCode::INT, 0, context.frameSize());
+    context.emit(OpCode::INT, 0, context.globalFrameSize());
 
     if (decoratedAst.children.size() > 1) {
         generateStatement(decoratedAst.children[1], symbols, context);
     }
 
-    context.emit(OpCode::RET, 0, 0);
+    context.emit(OpCode::RET, 0, -1);
 }
 
 void generateStatement(const AstNode &node, const SymbolTable &symbols,

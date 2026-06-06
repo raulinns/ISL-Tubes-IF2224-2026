@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <istream>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -155,6 +156,15 @@ RuntimeValue inputValueFromToken(const std::string &token,
     return RuntimeValue::parseLiteral(token, declaredType);
 }
 
+int readlnTargetOffset(const Instruction &instruction) {
+    const std::string hint = operatorHint(instruction);
+    const std::size_t space = hint.find(' ');
+    if (space == std::string::npos || space + 1 >= hint.size()) {
+        throw ArionRuntimeError("READLN instruction is missing target offset");
+    }
+    return std::stoi(hint.substr(space + 1));
+}
+
 void executeReadln(Interpreter &interpreter, const Instruction &instruction) {
     std::string token;
     if (!(interpreter.input() >> token)) {
@@ -162,9 +172,9 @@ void executeReadln(Interpreter &interpreter, const Instruction &instruction) {
     }
 
     try {
-        interpreter.stack().writeAt(
-            instruction.level,
-            inputValueFromToken(token, instruction.literalText));
+        interpreter.stack().writeAt(instruction.level,
+                                    readlnTargetOffset(instruction),
+                                    inputValueFromToken(token, instruction.literalText));
     } catch (const std::exception &e) {
         throw RuntimeTypeError("readln cannot parse input '" + token +
                                "' as " + instruction.literalText + ": " +
